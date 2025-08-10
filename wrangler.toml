@@ -1,0 +1,10 @@
+name = "headacher"
+main = "worker/index.ts"
+compatibility_date = "2025-08-10"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "headacher"
+database_id = "<production-db-id>"
+preview_database_id = "headacher"
+

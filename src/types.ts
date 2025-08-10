@@ -1,0 +1,65 @@
+// Shared TypeScript models and helper types
+
+export interface Env {
+  DB: D1Database;
+}
+
+export interface Headache {
+  id?: number;
+  timestamp: string; // ISO-8601 UTC
+  severity: number; // 0-10
+  aura: 0 | 1;
+}
+
+export interface EventItem {
+  id?: number;
+  timestamp: string;
+  event_type: string;
+  value: string;
+}
+
+// Helper types for pagination and filtering
+export type ISO8601String = string;
+export type AuraFlag = 0 | 1;
+export type SortOrder = "asc" | "desc";
+
+export interface PaginationParams {
+  // Maximum number of items to return
+  limit?: number;
+  // Number of items to skip (offset-based pagination)
+  offset?: number;
+  // Opaque cursor token for cursor-based pagination
+  cursor?: string;
+  // Sort order for time-based fields (e.g., timestamp)
+  order?: SortOrder;
+}
+
+export interface DateRangeFilter {
+  // Inclusive start of the time range
+  start?: ISO8601String;
+  // Inclusive end of the time range
+  end?: ISO8601String;
+}
+
+export interface HeadacheFilterParams {
+  range?: DateRangeFilter;
+  minSeverity?: number;
+  maxSeverity?: number;
+  aura?: AuraFlag;
+}
+
+export interface EventFilterParams {
+  range?: DateRangeFilter;
+  // Filter by one or more event types
+  event_types?: string[];
+  // Optional value match (exact/partial per implementation)
+  value?: string;
+}
+
+export interface Page<T> {
+  items: T[];
+  nextCursor?: string;
+  prevCursor?: string;
+  total?: number;
+}
+
