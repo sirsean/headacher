@@ -67,41 +67,40 @@ function App() {
 
   return (
     <div className="container mx-auto max-w-3xl p-6 space-y-6">
-      <h1 className="text-3xl font-semibold">Headacher</h1>
+      <h1 className="font-display text-4xl tracking-wider text-[--color-neon-cyan] drop-shadow-[0_0_12px_rgba(0,229,255,0.35)]">Headacher</h1>
 
       <div className="flex items-center gap-3">
-        <button className="inline-flex items-center rounded-md bg-neutral-900 text-white px-3 py-2 text-sm disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-                onClick={refresh} disabled={loading} aria-label='refresh'>
+        <button className="btn btn-primary disabled:opacity-50" onClick={refresh} disabled={loading} aria-label='refresh'>
           {loading ? 'Loading…' : 'Refresh'}
         </button>
-        {error && <p className="text-sm text-red-600">Error: {error}</p>}
+        {error && <p className="text-sm text-[--color-neon-pink]">Error: {error}</p>}
       </div>
 
-      <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
-        <h2 className="text-xl font-medium mb-3">New Headache</h2>
+      <div className="panel">
+        <h2 className="font-display text-xl mb-3 text-[--color-neon-violet]">New Headache</h2>
         <form onSubmit={onCreateHeadache} className="grid sm:grid-cols-3 gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Timestamp</span>
+            <span className="text-sm text-[--color-subtle]">Timestamp</span>
             <input
-              className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1"
+              className="rounded-md border border-[color:color-mix(in_oklch,var(--color-neon-cyan)_22%,transparent)] bg-transparent px-2 py-1"
               type='datetime-local'
               value={newHeadache.timestamp.replace('Z', '')}
               onChange={(e) => setNewHeadache({ ...newHeadache, timestamp: new Date(e.target.value).toISOString() })}
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Severity</span>
+            <span className="text-sm text-[--color-subtle]">Severity</span>
             <input
-              className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1"
+              className="rounded-md border border-[color:color-mix(in_oklch,var(--color-neon-cyan)_22%,transparent)] bg-transparent px-2 py-1"
               type='number' min={0} max={10}
               value={newHeadache.severity}
               onChange={(e) => setNewHeadache({ ...newHeadache, severity: Number(e.target.value) })}
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Aura</span>
+            <span className="text-sm text-[--color-subtle]">Aura</span>
             <select
-              className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1"
+              className="rounded-md border border-[color:color-mix(in_oklch,var(--color-neon-cyan)_22%,transparent)] bg-transparent px-2 py-1"
               value={newHeadache.aura}
               onChange={(e) => setNewHeadache({ ...newHeadache, aura: Number(e.target.value) as 0 | 1 })}
             >
@@ -110,22 +109,20 @@ function App() {
             </select>
           </label>
           <div className="sm:col-span-3">
-            <button type='submit' className="rounded-md bg-blue-600 text-white px-3 py-2 text-sm">
-              Create
-            </button>
+            <button type='submit' className="btn btn-primary">Create</button>
           </div>
         </form>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
-        <h2 className="text-xl font-medium mb-3">Headaches</h2>
-        <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
+      <div className="panel">
+        <h2 className="font-display text-xl mb-3 text-[--color-neon-violet]">Headaches</h2>
+        <ul className="divide-y divide-[color:color-mix(in_oklch,var(--color-neon-violet)_18%,transparent)]">
           {headaches.map((h) => (
             <li key={h.id} className="flex items-center justify-between py-2">
               <span className="text-sm">
                 {h.timestamp} — sev {h.severity} — aura {h.aura}
               </span>
-              <button className="text-sm text-red-600 hover:underline" aria-label={`delete-${h.id}`} onClick={async () => {
+              <button className="btn-ghost" aria-label={`delete-${h.id}`} onClick={async () => {
                 try {
                   await deleteHeadache(h.id!)
                   setHeadaches((prev) => prev.filter((x) => x.id !== h.id))
@@ -138,53 +135,51 @@ function App() {
         </ul>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
-        <h2 className="text-xl font-medium mb-3">New Event</h2>
+      <div className="panel">
+        <h2 className="font-display text-xl mb-3 text-[--color-neon-violet]">New Event</h2>
         <form onSubmit={onCreateEvent} className="grid sm:grid-cols-3 gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Timestamp</span>
+            <span className="text-sm text-[--color-subtle]">Timestamp</span>
             <input
-              className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1"
+              className="rounded-md border border-[color:color-mix(in_oklch,var(--color-neon-cyan)_22%,transparent)] bg-transparent px-2 py-1"
               type='datetime-local'
               value={newEvent.timestamp.replace('Z', '')}
               onChange={(e) => setNewEvent({ ...newEvent, timestamp: new Date(e.target.value).toISOString() })}
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Type</span>
+            <span className="text-sm text-[--color-subtle]">Type</span>
             <input
-              className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1"
+              className="rounded-md border border-[color:color-mix(in_oklch,var(--color-neon-cyan)_22%,transparent)] bg-transparent px-2 py-1"
               type='text'
               value={newEvent.event_type}
               onChange={(e) => setNewEvent({ ...newEvent, event_type: e.target.value })}
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Value</span>
+            <span className="text-sm text-[--color-subtle]">Value</span>
             <input
-              className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1"
+              className="rounded-md border border-[color:color-mix(in_oklch,var(--color-neon-cyan)_22%,transparent)] bg-transparent px-2 py-1"
               type='text'
               value={newEvent.value}
               onChange={(e) => setNewEvent({ ...newEvent, value: e.target.value })}
             />
           </label>
           <div className="sm:col-span-3">
-            <button type='submit' className="rounded-md bg-blue-600 text-white px-3 py-2 text-sm">
-              Create
-            </button>
+            <button type='submit' className="btn btn-primary">Create</button>
           </div>
         </form>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
-        <h2 className="text-xl font-medium mb-3">Events</h2>
-        <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
+      <div className="panel">
+        <h2 className="font-display text-xl mb-3 text-[--color-neon-violet]">Events</h2>
+        <ul className="divide-y divide-[color:color-mix(in_oklch,var(--color-neon-violet)_18%,transparent)]">
           {events.map((e) => (
             <li key={e.id} className="flex items-center justify-between py-2">
               <span className="text-sm">
                 {e.timestamp} — [{e.event_type}] {e.value}
               </span>
-              <button className="text-sm text-red-600 hover:underline" aria-label={`delete-event-${e.id}`} onClick={async () => {
+              <button className="btn-ghost" aria-label={`delete-event-${e.id}`} onClick={async () => {
                 try {
                   await deleteEvent(e.id!)
                   setEvents((prev) => prev.filter((x) => x.id !== e.id))

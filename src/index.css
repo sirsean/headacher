@@ -1,10 +1,79 @@
 @import "tailwindcss";
 
+/* Cyberpunk-retro theme tokens */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-display: "Orbitron", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+  --font-sans: "Oxanium", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --color-bg: #0a0b14;        /* deep void */
+  --color-panel: #0e0f1a;     /* elevated surface (darker for contrast) */
+  --color-ink: #f6f7ff;       /* near white for higher legibility */
+  --color-subtle: #c9cde0;    /* muted but brighter for readability */
+
+  --color-neon-cyan: #00e5ff;
+  --color-neon-pink: #ff2bd6;
+  --color-neon-lime: #a3ff12;
+  --color-neon-violet: #7a5cff;
+  --color-attention: #ffe45e; /* headings / high-attention yellow */
 }
 
-html, body, #root {
-  height: 100%;
-  min-height: 100%;
+html, body, #root { height: 100%; min-height: 100%; }
+
+/* Global background and typography */
+html { color: var(--color-ink); }
+body {
+  @apply font-sans;
+  color: var(--color-ink);
+  background-color: var(--color-bg);
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, rgba(122,92,255,0.12), rgba(0,0,0,0) 60%),
+    radial-gradient(800px 400px at 100% 0%, rgba(0,229,255,0.10), rgba(0,0,0,0) 50%),
+    linear-gradient(180deg, rgba(255,43,214,0.07) 0%, rgba(10,11,20,0) 40%);
 }
+
+/* Subtle scanline/grid overlay for retro vibe (very low opacity to be migraine-friendly) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 100% 24px, 24px 100%;
+  mix-blend-mode: overlay;
+}
+
+/* Card & panel helpers */
+.panel {
+  @apply rounded-xl border p-4 md:p-5;
+  color: var(--color-ink);
+  border-color: color-mix(in oklch, var(--color-neon-violet) 35%, transparent);
+  background: color-mix(in oklch, var(--color-panel) 98%, transparent);
+}
+
+.btn {
+  @apply inline-flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors;
+}
+.btn-primary {
+  color: #0b0b12; /* dark text on neon button for contrast */
+  background-color: color-mix(in oklch, var(--color-neon-lime) 85%, white 0%);
+}
+.btn-primary:hover { background-color: color-mix(in oklch, var(--color-neon-lime) 70%, var(--color-neon-cyan) 30%); }
+
+.btn-ghost {
+  @apply text-sm underline-offset-4 hover:underline;
+  color: color-mix(in oklch, var(--color-neon-pink) 90%, white 10%);
+}
+.btn-ghost:hover { color: color-mix(in oklch, var(--color-neon-pink) 80%, var(--color-neon-violet) 20%); }
+
+/* Headings emphasize attention */
+h1, h2, h3 { color: var(--color-attention); font-family: var(--font-display); }
+
+/* Form controls inherit light text */
+input, select, textarea {
+  color: var(--color-ink);
+  caret-color: var(--color-neon-cyan);
+}
+::placeholder { color: color-mix(in oklch, var(--color-subtle) 80%, var(--color-ink) 20%); }
