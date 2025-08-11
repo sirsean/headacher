@@ -34,7 +34,7 @@ export async function listHeadaches(params: ListHeadachesParams = {}): Promise<{
   return handleJson(res)
 }
 
-export async function createHeadache(h: Omit<Headache, 'id'>): Promise<Headache> {
+export async function createHeadache(h: Pick<Headache, 'severity' | 'aura'>): Promise<Headache> {
   const res = await fetch(`${API_BASE}/api/headaches`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -80,7 +80,7 @@ export async function listEvents(params: ListEventsParams = {}): Promise<{ items
   return handleJson(res)
 }
 
-export async function createEvent(e: Omit<EventItem, 'id'>): Promise<EventItem> {
+export async function createEvent(e: Pick<EventItem, 'event_type' | 'value'>): Promise<EventItem> {
   const res = await fetch(`${API_BASE}/api/events`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

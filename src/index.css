@@ -16,6 +16,9 @@
   --color-neon-lime: #a3ff12;
   --color-neon-violet: #7a5cff;
   --color-attention: #ffe45e; /* headings / high-attention yellow */
+  --color-danger: #7a0a1a;    /* dark red for NO states */
+  --color-warn: #ff9f1a;      /* orange for mid-high severity */
+  --color-alert: #ff3b3b;     /* bright red for high severity */
 }
 
 html, body, #root { height: 100%; min-height: 100%; }
@@ -77,3 +80,59 @@ input, select, textarea {
   caret-color: var(--color-neon-cyan);
 }
 ::placeholder { color: color-mix(in oklch, var(--color-subtle) 80%, var(--color-ink) 20%); }
+
+/* Severity range styling */
+.range-severity {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px; /* thicker track */
+  border-radius: 999px;
+  background: transparent; /* track drawn in pseudo elements */
+  outline: none;
+}
+.range-severity:focus { box-shadow: 0 0 0 3px color-mix(in oklch, var(--sev-color) 30%, transparent); }
+
+.range-severity::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--sev-color) 0%,
+    var(--sev-color) var(--percent),
+    #2a2c3a var(--percent),
+    #2a2c3a 100%
+  );
+}
+.range-severity::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -4px; /* center thumb on thicker track */
+  width: 22px; /* larger thumb */
+  height: 22px;
+  border-radius: 50%;
+  background: var(--sev-color);
+  border: 2px solid #0b0b12;
+  box-shadow: 0 0 10px color-mix(in oklch, var(--sev-color) 60%, transparent);
+  cursor: pointer;
+}
+.range-severity::-moz-range-track {
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--sev-color) 0%,
+    var(--sev-color) var(--percent),
+    #2a2c3a var(--percent),
+    #2a2c3a 100%
+  );
+}
+.range-severity::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--sev-color);
+  border: 2px solid #0b0b12;
+  box-shadow: 0 0 10px color-mix(in oklch, var(--sev-color) 60%, transparent);
+  cursor: pointer;
+}

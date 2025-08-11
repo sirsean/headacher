@@ -95,9 +95,8 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       const body = await readJson<any>(request);
       if (!body) return error(400, "Invalid JSON body");
 
-      const { timestamp, severity, aura } = body ?? {};
+      const { severity, aura } = body ?? {};
       const validationErrors: Record<string, string> = {};
-      if (!validateTimestamp(timestamp)) validationErrors.timestamp = "timestamp must be a valid ISO-8601 string";
       if (!isInt(severity) || severity < 0 || severity > 10)
         validationErrors.severity = "severity must be an integer between 0 and 10";
       if (!isInt(aura) || (aura !== 0 && aura !== 1))
@@ -107,7 +106,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
         return error(422, "Validation failed", validationErrors);
       }
 
-      const iso = toISO(timestamp);
+      const iso = new Date().toISOString();
       const res = await dbRun(
         env.DB,
         "INSERT INTO headaches (timestamp, severity, aura) VALUES (?, ?, ?)",
@@ -234,9 +233,8 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       const body = await readJson<any>(request);
       if (!body) return error(400, "Invalid JSON body");
 
-      const { timestamp, event_type, value } = body ?? {};
+      const { event_type, value } = body ?? {};
       const validationErrors: Record<string, string> = {};
-      if (!validateTimestamp(timestamp)) validationErrors.timestamp = "timestamp must be a valid ISO-8601 string";
       if (typeof event_type !== "string" || event_type.trim().length === 0)
         validationErrors.event_type = "event_type must be a non-empty string";
       if (typeof value !== "string") validationErrors.value = "value must be a string";
@@ -245,7 +243,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
         return error(422, "Validation failed", validationErrors);
       }
 
-      const iso = toISO(timestamp);
+      const iso = new Date().toISOString();
       const res = await dbRun(
         env.DB,
         "INSERT INTO events (timestamp, event_type, value) VALUES (?, ?, ?)",
