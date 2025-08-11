@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import HomePage from './HomePage'
+import DashboardPage from './DashboardPage'
 import EntryPage from './EntryPage.jsx'
 import HistoryPage from './HistoryPage.jsx'
 
@@ -9,6 +10,7 @@ function App() {
       <Routes>
         {/* Define child routes relative to the parent (mounted at /*) */}
         <Route index element={<HomePage />} />
+        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="entry" element={<EntryPage />} />
         <Route path="history" element={<HistoryPage />} />
       </Routes>

@@ -107,3 +107,25 @@ export async function deleteEvent(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/events/${id}`, { method: 'DELETE' })
   if (!res.ok && res.status !== 204) await handleJson(res)
 }
+
+// Dashboard
+export interface DashboardData {
+  days_requested: number
+  start_date: string
+  end_date: string
+  headaches: Array<{
+    timestamp: string
+    severity: number
+    aura: number
+  }>
+  events: Array<{
+    event_type: string
+    value: string
+    timestamp: string
+  }>
+}
+
+export async function getDashboardData(days: number = 30): Promise<DashboardData> {
+  const res = await fetch(`${API_BASE}/api/dashboard?days=${days}`)
+  return handleJson(res)
+}

@@ -22,6 +22,70 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
     methods: ["GET"],
     handler: async () => ok(),
   },
+  // Dashboard data
+  {
+    pattern: new URLPattern({ pathname: "/api/dashboard" }),
+    methods: ["GET"],
+    handler: async (request, env) => {
+      const url = new URL(request.url);
+      const daysParam = url.searchParams.get("days");
+      let days = 30; // default to 30 days
+      if (daysParam) {
+        const n = Number(daysParam);
+        if (Number.isFinite(n) && n > 0) days = Math.min(365, Math.max(1, Math.trunc(n)));
+      }
+
+      // Calculate date range
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(endDate.getDate() - days);
+      const startISO = startDate.toISOString();
+      const endISO = endDate.toISOString();
+
+      // Query for daily headache summary
+      const dailyStatsSQL = `
+        SELECT 
+          timestamp,
+          severity,
+          aura
+        FROM headaches 
+        WHERE timestamp >= ? AND timestamp <= ?
+        ORDER BY timestamp
+      `;
+
+      // Query for events in the same period
+      const eventsSQL = `
+        SELECT 
+          event_type,
+          value,
+          timestamp
+        FROM events 
+        WHERE timestamp >= ? AND timestamp <= ?
+        ORDER BY timestamp
+      `;
+
+      const [headaches, events] = await Promise.all([
+        dbAll<any>(env.DB, dailyStatsSQL, [startISO, endISO], (row) => ({
+          timestamp: row.timestamp,
+          severity: row.severity,
+          aura: row.aura
+        })),
+        dbAll<any>(env.DB, eventsSQL, [startISO, endISO], (row) => ({
+          event_type: row.event_type,
+          value: row.value,
+          timestamp: row.timestamp
+        }))
+      ]);
+
+      return json({ 
+        days_requested: days,
+        start_date: startISO.split('T')[0],
+        end_date: endISO.split('T')[0],
+        headaches,
+        events
+      });
+    },
+  },
   // CORS preflight for all /api/*
   {
     pattern: new URLPattern({ pathname: "/api/*" }),

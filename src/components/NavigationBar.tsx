@@ -13,6 +13,14 @@ function NavigationBar() {
         </NavLink>
         <div className="flex gap-4">
           <NavLink
+            to="/dashboard"
+            className={({ isActive }) =>
+              [baseClasses, isActive ? activeClasses : inactiveClasses].join(' ')
+            }
+          >
+            Dashboard
+          </NavLink>
+          <NavLink
             to="/entry"
             className={({ isActive }) =>
               [baseClasses, isActive ? activeClasses : inactiveClasses].join(' ')
