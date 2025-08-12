@@ -16,6 +16,7 @@ export default function EventEntryForm({
 }: EventEntryFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [newEvent, setNewEvent] = useState({ event_type: '', value: '' })
+  const [typeaheadReload, setTypeaheadReload] = useState(0)
   const { addEvent } = useMutations()
   const { success, error: showError } = useNotifications()
 
@@ -43,6 +44,7 @@ export default function EventEntryForm({
       const shortValue = newEvent.value.length > 20 ? newEvent.value.substring(0, 20) + '...' : newEvent.value
       success(`Event logged: [${newEvent.event_type}] ${shortValue}`)
       setNewEvent({ event_type: '', value: '' })
+      setTypeaheadReload(r => r + 1)
       onSuccess?.()
     } catch (e: any) {
       const errorMsg = e?.message || 'Failed to create event'
@@ -74,6 +76,7 @@ export default function EventEntryForm({
             <TypeaheadInput
               value={newEvent.event_type}
               onChange={(v) => setNewEvent({ ...newEvent, event_type: v })}
+              reloadSignal={typeaheadReload}
             />
           </label>
           <label className="flex flex-col gap-1">

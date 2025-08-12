@@ -24,6 +24,7 @@ export default function HeadacheEntryForm({
   const [error, setError] = useState<string | null>(null)
   const [newHeadache, setNewHeadache] = useState({ severity: 5, aura: 0 as 0 | 1 })
   const [newEvent, setNewEvent] = useState({ event_type: '', value: '' })
+  const [typeaheadReload, setTypeaheadReload] = useState(0)
   const { addHeadache, addEvent } = useMutations()
   const { success, error: showError } = useNotifications()
 
@@ -66,6 +67,7 @@ export default function HeadacheEntryForm({
       const shortValue = newEvent.value.length > 20 ? newEvent.value.substring(0, 20) + '...' : newEvent.value
       success(`Event logged: [${newEvent.event_type}] ${shortValue}`)
       setNewEvent({ event_type: '', value: '' })
+      setTypeaheadReload(r => r + 1)
       onSuccess?.()
     } catch (e: any) {
       const errorMsg = e?.message || 'Failed to create event'
@@ -144,6 +146,7 @@ export default function HeadacheEntryForm({
                 value={newEvent.event_type}
                 onChange={(value) => setNewEvent({ ...newEvent, event_type: value })}
                 placeholder="Enter event type..."
+                reloadSignal={typeaheadReload}
               />
             </label>
             <label className="flex flex-col gap-1">

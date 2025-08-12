@@ -2,18 +2,20 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { listEventTypes } from '../api'
 import { useAuth } from '../context/AuthContext'
 
-interface TypeaheadInputProps {
+export interface TypeaheadInputProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
   className?: string
+  reloadSignal?: number | string
 }
 
 export default function TypeaheadInput({
   value,
   onChange,
   placeholder,
-  className
+  className,
+  reloadSignal
 }: TypeaheadInputProps) {
   const { fetchWithAuth } = useAuth()
   const [allTypes, setAllTypes] = useState<string[]>([])
@@ -23,18 +25,27 @@ export default function TypeaheadInput({
   const dropdownRef = useRef<HTMLUListElement>(null)
   const listboxId = useRef(`typeahead-listbox-${Math.random().toString(36).substr(2, 9)}`)
 
-  // Fetch event types on mount
-  useEffect(() => {
-    async function fetchTypes() {
-      try {
-        const result = await listEventTypes(fetchWithAuth)
-        setAllTypes(result.types)
-      } catch (error) {
-        console.error('Failed to fetch event types:', error)
-      }
+  // Standalone function to load types
+  const loadTypes = useCallback(async () => {
+    try {
+      const result = await listEventTypes(fetchWithAuth)
+      setAllTypes(result.types)
+    } catch (error) {
+      console.error('Failed to fetch event types:', error)
     }
-    fetchTypes()
   }, [fetchWithAuth])
+
+  // Load types on first mount
+  useEffect(() => {
+    loadTypes()
+  }, [loadTypes])
+
+  // Load types when reloadSignal changes
+  useEffect(() => {
+    if (reloadSignal !== undefined) {
+      loadTypes()
+    }
+  }, [reloadSignal, loadTypes])
 
   // Filter types based on current input value (case-insensitive, startsWith)
   const filteredTypes = allTypes
