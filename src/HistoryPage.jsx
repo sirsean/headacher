@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useAuth } from './context/AuthContext'
 import { useHeadacheEntries } from './hooks/useHeadacheEntries'
 import { useMutations } from './context/MutationsContext'
+import WalletButton from './components/WalletButton'
 
 function getSeverityColor(sev) {
   if (sev <= 3) return 'var(--color-neon-lime)'
@@ -23,6 +25,53 @@ function formatLocal(ts) {
 }
 
 export default function HistoryPage() {
+  const { address } = useAuth()
+  
+  // Show login required state when not authenticated
+  if (!address) {
+    return (
+      <div className="space-y-6">
+        <div className="panel text-center">
+          <h2 className="font-display text-2xl mb-4 text-[--color-neon-violet]">Authentication Required</h2>
+          <div className="space-y-4">
+            <p className="text-[--color-subtle] text-lg">
+              You need to connect your wallet to view your history.
+            </p>
+            <p className="text-[--color-subtle]">
+              Your history shows all your tracked headaches and events, allowing you to review patterns and make data-driven health decisions.
+            </p>
+            <WalletButton className="mx-auto" />
+          </div>
+        </div>
+        
+        <div className="panel">
+          <h3 className="font-display text-lg mb-3 text-[--color-attention]">What You'll Find:</h3>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="font-display text-base mb-2 text-[--color-neon-cyan]">Headache History</h4>
+              <ul className="space-y-1 text-sm text-[--color-subtle]">
+                <li>• Complete chronological list</li>
+                <li>• Severity levels with color coding</li>
+                <li>• Aura indicators</li>
+                <li>• Detailed timestamps</li>
+                <li>• Edit and delete capabilities</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-display text-base mb-2 text-[--color-neon-cyan]">Event Timeline</h4>
+              <ul className="space-y-1 text-sm text-[--color-subtle]">
+                <li>• All recorded events and triggers</li>
+                <li>• Categorized by event type</li>
+                <li>• Searchable and filterable</li>
+                <li>• Full edit and management tools</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const [showDeleteHeadaches, setShowDeleteHeadaches] = useState(false)
   const [showDeleteEvents, setShowDeleteEvents] = useState(false)
 

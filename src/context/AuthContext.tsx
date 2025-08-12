@@ -50,8 +50,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Check for existing auth on mount
   useEffect(() => {
     const account = getAccount(config)
-    if (account.address) {
+    const token = localStorage.getItem('auth_token')
+    
+    console.log('Auth mount check - account:', account.address, 'token exists:', !!token)
+    
+    // Only set address if we have both a connected wallet and a valid token
+    if (account.address && token) {
+      console.log('Restoring auth state for:', account.address)
       setAddress(account.address)
+    } else if (token && !account.address) {
+      // If we have a token but no connected wallet, clear the token
+      console.log('Clearing stale token - wallet not connected')
+      localStorage.removeItem('auth_token')
+    } else {
+      console.log('No auth to restore')
     }
   }, [])
 
@@ -122,9 +134,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { token } = await verifyResponse.json()
+      console.log('Successfully got token, storing in localStorage')
 
       // Store JWT in localStorage
       localStorage.setItem('auth_token', token)
+      
+      // Ensure address is still set after successful auth
+      console.log('Setting address after successful auth:', userAddress)
+      setAddress(userAddress)
 
     } catch (error) {
       console.error('Connection failed:', error)

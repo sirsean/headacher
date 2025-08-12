@@ -1,9 +1,56 @@
 import { useState } from 'react'
+import { useAuth } from './context/AuthContext'
 import DashboardChart from './components/DashboardChart'
+import WalletButton from './components/WalletButton'
 import type { DashboardData } from './api'
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
+  const { address } = useAuth()
+
+  // Show login required state when not authenticated
+  if (!address) {
+    return (
+      <div className="space-y-6">
+        <div className="panel text-center">
+          <h2 className="font-display text-2xl mb-4 text-[--color-neon-violet]">Authentication Required</h2>
+          <div className="space-y-4">
+            <p className="text-[--color-subtle] text-lg">
+              You need to connect your wallet to view your dashboard.
+            </p>
+            <p className="text-[--color-subtle]">
+              Your dashboard displays personalized headache patterns and trends based on your tracked data.
+            </p>
+            <WalletButton className="mx-auto" />
+          </div>
+        </div>
+        
+        <div className="panel">
+          <h3 className="font-display text-lg mb-3 text-[--color-attention]">What You'll See:</h3>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="font-display text-base mb-2 text-[--color-neon-cyan]">Visual Charts</h4>
+              <ul className="space-y-1 text-sm text-[--color-subtle]">
+                <li>• Headache severity over time</li>
+                <li>• Frequency patterns and trends</li>
+                <li>• Aura occurrence visualization</li>
+                <li>• Event correlation timeline</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-display text-base mb-2 text-[--color-neon-cyan]">Summary Statistics</h4>
+              <ul className="space-y-1 text-sm text-[--color-subtle]">
+                <li>• Average headache severity</li>
+                <li>• Frequency per day/week/month</li>
+                <li>• Aura occurrence percentage</li>
+                <li>• Recent events and triggers</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
