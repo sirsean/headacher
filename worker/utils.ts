@@ -125,6 +125,7 @@ export function mapHeadache(row: any): Headache {
     timestamp: String(row.timestamp),
     severity: Number(row.severity),
     aura: Number(row.aura) as 0 | 1,
+    user_id: String(row.user_id),
   };
 }
 
@@ -134,6 +135,7 @@ export function mapEvent(row: any): EventItem {
     timestamp: String(row.timestamp),
     event_type: String(row.event_type),
     value: String(row.value),
+    user_id: String(row.user_id),
   };
 }
 

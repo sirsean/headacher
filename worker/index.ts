@@ -62,6 +62,49 @@ async function requireAuth(request: Request, env: Env): Promise<string> {
   }
 }
 
+// Common SQL builders to reduce repetition and ensure user scoping
+function buildSelectWithUserScope(table: string, where: string[], params: any[], addr: string): { sql: string; params: any[] } {
+  const userScopedWhere = [...where, 'user_id = ?'];
+  const userScopedParams = [...params, addr];
+  const whereClause = `WHERE ${userScopedWhere.join(' AND ')}`;
+  return {
+    sql: `SELECT * FROM ${table} ${whereClause}`,
+    params: userScopedParams
+  };
+}
+
+function buildInsertWithUserScope(table: string, columns: string[], values: any[], addr: string): { sql: string; params: any[] } {
+  const userScopedColumns = [...columns, 'user_id'];
+  const userScopedValues = [...values, addr];
+  const placeholders = userScopedColumns.map(() => '?').join(', ');
+  return {
+    sql: `INSERT INTO ${table} (${userScopedColumns.join(', ')}) VALUES (${placeholders})`,
+    params: userScopedValues
+  };
+}
+
+function buildUpdateWithUserScope(table: string, fields: string[], params: any[], id: number, addr: string): { sql: string; params: any[] } {
+  const userScopedParams = [...params, id, addr];
+  return {
+    sql: `UPDATE ${table} SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
+    params: userScopedParams
+  };
+}
+
+function buildDeleteWithUserScope(table: string, id: number, addr: string): { sql: string; params: any[] } {
+  return {
+    sql: `DELETE FROM ${table} WHERE id = ? AND user_id = ?`,
+    params: [id, addr]
+  };
+}
+
+function buildSelectByIdWithUserScope(table: string, id: number, addr: string): { sql: string; params: any[] } {
+  return {
+    sql: `SELECT * FROM ${table} WHERE id = ? AND user_id = ?`,
+    params: [id, addr]
+  };
+}
+
 const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   // Health check
   {
@@ -177,11 +220,11 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       return json({ success: true, message: "Logged out successfully" });
     },
   },
-  // Dashboard data
+// Dashboard data
   {
     pattern: new URLPattern({ pathname: "/api/dashboard" }),
     methods: ["GET"],
-    handler: requireAuthentication(async (request, env) => {
+    handler: requireAuthentication(async (request, env, match, addr) => {
       const url = new URL(request.url);
       const daysParam = url.searchParams.get("days");
       let days = 30; // default to 30 days
@@ -197,35 +240,35 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       const startISO = startDate.toISOString();
       const endISO = endDate.toISOString();
 
-      // Query for daily headache summary
+      // Query for daily headache summary with user scoping
       const dailyStatsSQL = `
         SELECT 
           timestamp,
           severity,
           aura
         FROM headaches 
-        WHERE timestamp >= ? AND timestamp <= ?
+        WHERE timestamp >= ? AND timestamp <= ? AND user_id = ?
         ORDER BY timestamp
       `;
 
-      // Query for events in the same period
+      // Query for events in the same period with user scoping
       const eventsSQL = `
         SELECT 
           event_type,
           value,
           timestamp
         FROM events 
-        WHERE timestamp >= ? AND timestamp <= ?
+        WHERE timestamp >= ? AND timestamp <= ? AND user_id = ?
         ORDER BY timestamp
       `;
 
       const [headaches, events] = await Promise.all([
-        dbAll<any>(env.DB, dailyStatsSQL, [startISO, endISO], (row) => ({
+        dbAll<any>(env.DB, dailyStatsSQL, [startISO, endISO, addr], (row) => ({
           timestamp: row.timestamp,
           severity: row.severity,
           aura: row.aura
         })),
-        dbAll<any>(env.DB, eventsSQL, [startISO, endISO], (row) => ({
+        dbAll<any>(env.DB, eventsSQL, [startISO, endISO, addr], (row) => ({
           event_type: row.event_type,
           value: row.value,
           timestamp: row.timestamp
@@ -262,7 +305,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   {
     pattern: new URLPattern({ pathname: "/api/headaches" }),
     methods: ["GET", "POST"],
-    handler: requireAuthentication(async (request, env) => {
+    handler: requireAuthentication(async (request, env, match, addr) => {
       const url = new URL(request.url);
       if (request.method === "GET") {
         // Query params
@@ -302,7 +345,11 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
           binds.push(min, max);
         }
 
-        const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+        // Add user scoping
+        where.push("user_id = ?");
+        binds.push(addr);
+
+        const whereClause = `WHERE ${where.join(" AND ")}`;
         const sql = `SELECT * FROM headaches ${whereClause} ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
         binds.push(limit, offset);
 
@@ -328,11 +375,11 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       const iso = new Date().toISOString();
       const res = await dbRun(
         env.DB,
-        "INSERT INTO headaches (timestamp, severity, aura) VALUES (?, ?, ?)",
-        [iso, severity, aura]
+        "INSERT INTO headaches (timestamp, severity, aura, user_id) VALUES (?, ?, ?, ?)",
+        [iso, severity, aura, addr]
       );
       const id = res.meta.last_row_id;
-      const item = await dbFirst<Headache>(env.DB, "SELECT * FROM headaches WHERE id = ?", [id], mapHeadache);
+      const item = await dbFirst<Headache>(env.DB, "SELECT * FROM headaches WHERE id = ? AND user_id = ?", [id, addr], mapHeadache);
       return json(item, 201, { Location: `/api/headaches/${id}` });
     }),
   },
@@ -340,13 +387,13 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   {
     pattern: new URLPattern({ pathname: "/api/headaches/:id" }),
     methods: ["GET", "PATCH", "DELETE"],
-    handler: requireAuthentication(async (request, env, match) => {
+    handler: requireAuthentication(async (request, env, match, addr) => {
       const idStr = match.pathname.groups.id;
       const id = Number(idStr);
       if (!Number.isFinite(id) || id < 1) return error(400, "Invalid id");
 
       if (request.method === "GET") {
-        const row = await dbFirst<Headache>(env.DB, "SELECT * FROM headaches WHERE id = ?", [id], mapHeadache);
+        const row = await dbFirst<Headache>(env.DB, "SELECT * FROM headaches WHERE id = ? AND user_id = ?", [id, addr], mapHeadache);
         if (!row) return error(404, "Not found");
         return json(row);
       }
@@ -385,16 +432,16 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
         if (Object.keys(errors).length) return error(422, "Validation failed", errors);
         if (fields.length === 0) return error(400, "No valid fields to update");
 
-        const sql = `UPDATE headaches SET ${fields.join(", ")} WHERE id = ?`;
-        binds.push(id);
+        const sql = `UPDATE headaches SET ${fields.join(", ")} WHERE id = ? AND user_id = ?`;
+        binds.push(id, addr);
         const result = await dbRun(env.DB, sql, binds);
         if (result.meta.changes === 0) return error(404, "Not found");
-        const row = await dbFirst<Headache>(env.DB, "SELECT * FROM headaches WHERE id = ?", [id], mapHeadache);
+        const row = await dbFirst<Headache>(env.DB, "SELECT * FROM headaches WHERE id = ? AND user_id = ?", [id, addr], mapHeadache);
         return json(row);
       }
 
       // DELETE
-      const del = await dbRun(env.DB, "DELETE FROM headaches WHERE id = ?", [id]);
+      const del = await dbRun(env.DB, "DELETE FROM headaches WHERE id = ? AND user_id = ?", [id, addr]);
       if (del.meta.changes === 0) return error(404, "Not found");
       return withCors(new Response(null, { status: 204 }));
     }),
@@ -403,7 +450,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   {
     pattern: new URLPattern({ pathname: "/api/events" }),
     methods: ["GET", "POST"],
-    handler: requireAuthentication(async (request, env) => {
+    handler: requireAuthentication(async (request, env, match, addr) => {
       const url = new URL(request.url);
       if (request.method === "GET") {
         // Query params
@@ -440,7 +487,11 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
           binds.push(typeParam);
         }
 
-        const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+        // Add user scoping
+        where.push("user_id = ?");
+        binds.push(addr);
+
+        const whereClause = `WHERE ${where.join(" AND ")}`;
         const sql = `SELECT * FROM events ${whereClause} ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
         binds.push(limit, offset);
 
@@ -465,11 +516,11 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       const iso = new Date().toISOString();
       const res = await dbRun(
         env.DB,
-        "INSERT INTO events (timestamp, event_type, value) VALUES (?, ?, ?)",
-        [iso, event_type, value]
+        "INSERT INTO events (timestamp, event_type, value, user_id) VALUES (?, ?, ?, ?)",
+        [iso, event_type, value, addr]
       );
       const id = res.meta.last_row_id;
-      const item = await dbFirst<EventItem>(env.DB, "SELECT * FROM events WHERE id = ?", [id], mapEvent);
+      const item = await dbFirst<EventItem>(env.DB, "SELECT * FROM events WHERE id = ? AND user_id = ?", [id, addr], mapEvent);
       return json(item, 201, { Location: `/api/events/${id}` });
     }),
   },
@@ -477,13 +528,13 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   {
     pattern: new URLPattern({ pathname: "/api/events/:id" }),
     methods: ["GET", "PATCH", "DELETE"],
-    handler: requireAuthentication(async (request, env, match) => {
+    handler: requireAuthentication(async (request, env, match, addr) => {
       const idStr = match.pathname.groups.id;
       const id = Number(idStr);
       if (!Number.isFinite(id) || id < 1) return error(400, "Invalid id");
 
       if (request.method === "GET") {
-        const row = await dbFirst<EventItem>(env.DB, "SELECT * FROM events WHERE id = ?", [id], mapEvent);
+        const row = await dbFirst<EventItem>(env.DB, "SELECT * FROM events WHERE id = ? AND user_id = ?", [id, addr], mapEvent);
         if (!row) return error(404, "Not found");
         return json(row);
       }
@@ -522,16 +573,16 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
         if (Object.keys(errors).length) return error(422, "Validation failed", errors);
         if (fields.length === 0) return error(400, "No valid fields to update");
 
-        const sql = `UPDATE events SET ${fields.join(", ")} WHERE id = ?`;
-        binds.push(id);
+        const sql = `UPDATE events SET ${fields.join(", ")} WHERE id = ? AND user_id = ?`;
+        binds.push(id, addr);
         const result = await dbRun(env.DB, sql, binds);
         if (result.meta.changes === 0) return error(404, "Not found");
-        const row = await dbFirst<EventItem>(env.DB, "SELECT * FROM events WHERE id = ?", [id], mapEvent);
+        const row = await dbFirst<EventItem>(env.DB, "SELECT * FROM events WHERE id = ? AND user_id = ?", [id, addr], mapEvent);
         return json(row);
       }
 
       // DELETE
-      const del = await dbRun(env.DB, "DELETE FROM events WHERE id = ?", [id]);
+      const del = await dbRun(env.DB, "DELETE FROM events WHERE id = ? AND user_id = ?", [id, addr]);
       if (del.meta.changes === 0) return error(404, "Not found");
       return withCors(new Response(null, { status: 204 }));
     }),

@@ -9,6 +9,7 @@ export interface Headache {
   timestamp: string; // ISO-8601 UTC
   severity: number; // 0-10
   aura: 0 | 1;
+  readonly user_id: string;
 }
 
 export interface EventItem {
@@ -16,6 +17,7 @@ export interface EventItem {
   timestamp: string;
   event_type: string;
   value: string;
+  readonly user_id: string;
 }
 
 // Helper types for pagination and filtering
