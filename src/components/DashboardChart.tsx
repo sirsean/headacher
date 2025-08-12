@@ -129,6 +129,7 @@ interface DashboardChartProps {
   showTitle?: boolean
   compact?: boolean
   onDataChange?: (data: DashboardData | null) => void
+  refreshTrigger?: number
 }
 
 export default function DashboardChart({ 
@@ -137,7 +138,8 @@ export default function DashboardChart({
   showControls = false,
   showTitle = true,
   compact = false,
-  onDataChange
+  onDataChange,
+  refreshTrigger = 0
 }: DashboardChartProps) {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -162,7 +164,7 @@ export default function DashboardChart({
 
   useEffect(() => {
     loadData()
-  }, [days])
+  }, [days, refreshTrigger])
 
   const chartData: ChartDataPoint[] = data ? aggregateDataByLocalDate(data.headaches, data.events, data.days_requested) : []
 

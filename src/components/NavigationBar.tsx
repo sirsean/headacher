@@ -8,12 +8,13 @@ function NavigationBar() {
 
   return (
     <nav className="w-full border-b border-[--color-border] mb-4">
-      <div className="mx-auto max-w-3xl p-4 flex items-center justify-between">
-        <NavLink to="/" className="text-xl font-display text-[--color-neon-cyan] hover:opacity-80 transition-opacity" style={{textShadow: '0 0 10px var(--color-neon-cyan)'}}>
+      <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6 flex items-center justify-between">
+        <NavLink to="/" className="text-lg sm:text-xl font-display text-[--color-neon-cyan] hover:opacity-80 transition-opacity" style={{textShadow: '0 0 10px var(--color-neon-cyan)'}}>
           <h1>Headacher</h1>
         </NavLink>
         <div className="flex items-center gap-4">
-          <div className="flex gap-4">
+          {/* Navigation links - hidden on mobile, shown on sm and up */}
+          <div className="hidden sm:flex gap-4">
             <NavLink
               to="/dashboard"
               className={({ isActive }) =>

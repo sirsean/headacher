@@ -52,18 +52,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const account = getAccount(config)
     const token = localStorage.getItem('auth_token')
     
-    console.log('Auth mount check - account:', account.address, 'token exists:', !!token)
-    
     // Only set address if we have both a connected wallet and a valid token
     if (account.address && token) {
-      console.log('Restoring auth state for:', account.address)
       setAddress(account.address)
     } else if (token && !account.address) {
       // If we have a token but no connected wallet, clear the token
-      console.log('Clearing stale token - wallet not connected')
       localStorage.removeItem('auth_token')
-    } else {
-      console.log('No auth to restore')
     }
   }, [])
 
@@ -91,10 +85,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { nonce } = await nonceResponse.json()
-      console.log('Got nonce:', nonce)
-      console.log('Chain ID:', result.chainId)
-      console.log('Domain:', window.location.host)
-      console.log('Address:', userAddress)
 
       // Create SIWE message
       const siweMessage = new SiweMessage({
@@ -106,17 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         chainId: result.chainId,
         nonce,
       })
-      console.log('SIWE message object created')
-      console.log(siweMessage);
 
       const message = siweMessage.prepareMessage()
-      console.log('SIWE message prepared:', message)
-      console.log('Message lines:', message.split('\n').length)
 
       // Sign message
-      console.log('About to sign message...')
       const signature = await signMessage(config, { message })
-      console.log('Message signed, signature:', signature)
 
       // Verify signature and get JWT
       const verifyResponse = await fetch('/api/auth/verify', {
@@ -134,13 +118,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { token } = await verifyResponse.json()
-      console.log('Successfully got token, storing in localStorage')
 
       // Store JWT in localStorage
       localStorage.setItem('auth_token', token)
       
       // Ensure address is still set after successful auth
-      console.log('Setting address after successful auth:', userAddress)
       setAddress(userAddress)
 
     } catch (error) {

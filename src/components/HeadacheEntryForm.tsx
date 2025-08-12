@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutations } from '../context/MutationsContext'
+import { useNotifications } from '../context/NotificationContext'
 
 function getSeverityColor(sev: number): string {
   if (sev <= 3) return 'var(--color-neon-lime)'
@@ -23,6 +24,7 @@ export default function HeadacheEntryForm({
   const [newHeadache, setNewHeadache] = useState({ severity: 5, aura: 0 })
   const [newEvent, setNewEvent] = useState({ event_type: 'note', value: '' })
   const { addHeadache, addEvent } = useMutations()
+  const { success, error: showError } = useNotifications()
 
   async function onCreateHeadache(ev: React.FormEvent) {
     ev.preventDefault()
@@ -30,21 +32,44 @@ export default function HeadacheEntryForm({
     try {
       await addHeadache(newHeadache)
       setNewHeadache({ severity: 5, aura: 0 })
+      success(`Headache recorded (severity: ${newHeadache.severity}${newHeadache.aura ? ', with aura' : ''})`)
       onSuccess?.()
     } catch (e: any) {
-      setError(e?.message || 'Failed to create headache')
+      const errorMsg = e?.message || 'Failed to create headache'
+      setError(errorMsg)
+      showError(errorMsg)
     }
   }
 
   async function onCreateEvent(ev: React.FormEvent) {
     ev.preventDefault()
     setError(null)
+    
+    // Validate form inputs
+    if (!newEvent.event_type.trim()) {
+      const errorMsg = 'Event type is required'
+      setError(errorMsg)
+      showError(errorMsg)
+      return
+    }
+    
+    if (!newEvent.value.trim()) {
+      const errorMsg = 'Event value is required'
+      setError(errorMsg)
+      showError(errorMsg)
+      return
+    }
+    
     try {
       await addEvent(newEvent)
+      const shortValue = newEvent.value.length > 20 ? newEvent.value.substring(0, 20) + '...' : newEvent.value
+      success(`Event logged: [${newEvent.event_type}] ${shortValue}`)
       setNewEvent({ event_type: 'note', value: '' })
       onSuccess?.()
     } catch (e: any) {
-      setError(e?.message || 'Failed to create event')
+      const errorMsg = e?.message || 'Failed to create event'
+      setError(errorMsg)
+      showError(errorMsg)
     }
   }
 

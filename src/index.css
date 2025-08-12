@@ -30,9 +30,12 @@ body {
   color: var(--color-ink);
   background-color: var(--color-bg);
   background-image:
-    radial-gradient(1200px 600px at 10% -10%, rgba(122,92,255,0.12), rgba(0,0,0,0) 60%),
-    radial-gradient(800px 400px at 100% 0%, rgba(0,229,255,0.10), rgba(0,0,0,0) 50%),
+    radial-gradient(120vw 60vh at 10% -10%, rgba(122,92,255,0.12), rgba(0,0,0,0) 60%),
+    radial-gradient(80vw 40vh at 100% 0%, rgba(0,229,255,0.10), rgba(0,0,0,0) 50%),
     linear-gradient(180deg, rgba(255,43,214,0.07) 0%, rgba(10,11,20,0) 40%);
+  background-attachment: fixed;
+  background-size: 100vw 100vh, 100vw 100vh, 100vw 100vh;
+  min-height: 100vh;
 }
 
 /* Subtle scanline/grid overlay for retro vibe (very low opacity to be migraine-friendly) */

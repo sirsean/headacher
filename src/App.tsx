@@ -6,7 +6,7 @@ import HistoryPage from './HistoryPage.jsx'
 
 function App() {
   return (
-    <div className="container mx-auto max-w-3xl p-6 space-y-6">
+    <div className="container mx-auto max-w-3xl px-4 py-6 sm:px-6 space-y-6">
       <Routes>
         {/* Define child routes relative to the parent (mounted at /*) */}
         <Route index element={<HomePage />} />

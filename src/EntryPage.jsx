@@ -1,5 +1,6 @@
 import { useAuth } from './context/AuthContext'
 import HeadacheEntryForm from './components/HeadacheEntryForm'
+import EventEntryForm from './components/EventEntryForm'
 import WalletButton from './components/WalletButton'
 
 export default function EntryPage() {
@@ -49,9 +50,12 @@ export default function EntryPage() {
     )
   }
 
-  // Show authenticated entry form
+  // Show authenticated entry forms
   return (
-    <HeadacheEntryForm showTitle={true} compact={false} />
+    <div className="space-y-6">
+      <HeadacheEntryForm showTitle={true} compact={true} />
+      <EventEntryForm showTitle={true} compact={false} />
+    </div>
   )
 }
 
