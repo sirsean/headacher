@@ -1,7 +1,11 @@
 name = "headacher"
 main = "worker/index.ts"
-compatibility_date = "2025-08-10"
+compatibility_date = "2025-08-03"
 compatibility_flags = ["nodejs_compat"]
+
+[assets]
+binding = "ASSETS"
+directory = "./dist/client"
 
 [[d1_databases]]
 binding = "DB"

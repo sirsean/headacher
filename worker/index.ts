@@ -63,6 +63,32 @@ async function requireAuth(request: Request, env: Env): Promise<string> {
 }
 
 
+async function serveAssetOrSpa(request: Request, env: Env): Promise<Response> {
+  // 1. Try to serve the exact asset.
+  let assetResp = await env.ASSETS.fetch(request);
+  // 2. If it exists (200/304/etc.) return immediately.
+  if (assetResp.status !== 404) return assetResp;
+
+  // 3. For HTML navigations (Accept header contains text/html) fallback to index.html.
+  const accept = request.headers.get('Accept') || '';
+  if (accept.includes('text/html')) {
+    // Rewrite to /index.html and try again.
+    const url = new URL(request.url);
+    url.pathname = '/index.html';
+    assetResp = await env.ASSETS.fetch(new Request(url.toString(), request));
+  }
+  
+  // Add Cache-Control for static files
+  const immutableTypes = /\.(js|css|png|svg|jpg|woff2?)$/i;
+  if (immutableTypes.test(new URL(request.url).pathname) && assetResp.status === 200) {
+    const resp = new Response(assetResp.body, assetResp);
+    resp.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    return resp;
+  }
+  
+  return assetResp;
+}
+
 const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   // Health check
   {
@@ -589,6 +615,7 @@ export default {
       }
     }
 
-    return new Response(null, { status: 404 });
+    // No matching API route → try static assets/SPA fallback
+    return await serveAssetOrSpa(request, env);
   },
 } satisfies ExportedHandler<Env>;

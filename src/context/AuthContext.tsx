@@ -1,9 +1,20 @@
 import { useMemo, useState, useCallback, useEffect, type ReactNode } from 'react'
-import { createConfig, http, connect as wagmiConnect, disconnect as wagmiDisconnect, signMessage, getAccount } from '@wagmi/core'
+import { createConfig, http, connect as wagmiConnect, disconnect as wagmiDisconnect, signMessage, getAccount, watchAccount } from '@wagmi/core'
 import { mainnet, sepolia } from '@wagmi/core/chains'
 import { injected, walletConnect } from '@wagmi/connectors'
 import { SiweMessage } from 'siwe'
 import { AuthContext } from './AuthContext'
+
+// Simple JWT token validation (check if expired)
+function isTokenValid(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    const exp = payload.exp * 1000 // Convert to milliseconds
+    return Date.now() < exp
+  } catch {
+    return false
+  }
+}
 
 // Configure wagmi with WalletConnect for mobile support
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
@@ -32,18 +43,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Check for existing auth on mount
+  // Check for existing auth on mount and watch for account changes
   useEffect(() => {
-    const account = getAccount(config)
     const token = localStorage.getItem('auth_token')
     
-    // Only set address if we have both a connected wallet and a valid token
-    if (account.address && token) {
-      setAddress(account.address)
-    } else if (token && !account.address) {
-      // If we have a token but no connected wallet, clear the token
-      localStorage.removeItem('auth_token')
+    // Function to sync auth state with current account
+    const syncAuthState = (account: { address?: `0x${string}` } | undefined) => {
+      if (account?.address && token && isTokenValid(token)) {
+        // We have both a connected wallet and a valid token
+        setAddress(account.address)
+      } else if (token && !isTokenValid(token)) {
+        // If we have an invalid/expired token, clear it
+        localStorage.removeItem('auth_token')
+        setAddress(null)
+      } else if (!token) {
+        // No token, make sure address is cleared
+        setAddress(null)
+      }
+      // NOTE: If we have a valid token but no account.address yet,
+      // we wait for the wallet to initialize via the account watcher
     }
+
+    // Initial check
+    const initialAccount = getAccount(config)
+    syncAuthState(initialAccount)
+
+    // Watch for account changes (connects, disconnects, switches)
+    const unwatchAccount = watchAccount(config, {
+      onChange: (account) => {
+        const currentToken = localStorage.getItem('auth_token')
+        
+        if (account.address && currentToken && isTokenValid(currentToken)) {
+          // Account connected and we have a valid token
+          setAddress(account.address)
+        } else if (account.address && currentToken && !isTokenValid(currentToken)) {
+          // Account connected but token is expired/invalid
+          localStorage.removeItem('auth_token')
+          setAddress(null)
+        } else if (!account.address && address) {
+          // Account was disconnected (we had an address before, now we don't)
+          if (currentToken) {
+            localStorage.removeItem('auth_token')
+          }
+          setAddress(null)
+        }
+        // NOTE: We don't delete tokens just because account.address is undefined
+        // during initialization - only when there's an explicit disconnect
+      }
+    })
+
+    // Cleanup watcher on unmount
+    return unwatchAccount
   }, [])
 
   const connect = useCallback(async () => {
