@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutations } from '../context/MutationsContext'
 import { useNotifications } from '../context/NotificationContext'
+import TypeaheadInput from './TypeaheadInput'
 
 function getSeverityColor(sev: number): string {
   if (sev <= 3) return 'var(--color-neon-lime)'
@@ -21,8 +22,8 @@ export default function HeadacheEntryForm({
   compact = false 
 }: HeadacheEntryFormProps) {
   const [error, setError] = useState<string | null>(null)
-  const [newHeadache, setNewHeadache] = useState({ severity: 5, aura: 0 })
-  const [newEvent, setNewEvent] = useState({ event_type: 'note', value: '' })
+  const [newHeadache, setNewHeadache] = useState({ severity: 5, aura: 0 as 0 | 1 })
+  const [newEvent, setNewEvent] = useState({ event_type: '', value: '' })
   const { addHeadache, addEvent } = useMutations()
   const { success, error: showError } = useNotifications()
 
@@ -31,7 +32,7 @@ export default function HeadacheEntryForm({
     setError(null)
     try {
       await addHeadache(newHeadache)
-      setNewHeadache({ severity: 5, aura: 0 })
+      setNewHeadache({ severity: 5, aura: 0 as 0 | 1 })
       success(`Headache recorded (severity: ${newHeadache.severity}${newHeadache.aura ? ', with aura' : ''})`)
       onSuccess?.()
     } catch (e: any) {
@@ -64,7 +65,7 @@ export default function HeadacheEntryForm({
       await addEvent(newEvent)
       const shortValue = newEvent.value.length > 20 ? newEvent.value.substring(0, 20) + '...' : newEvent.value
       success(`Event logged: [${newEvent.event_type}] ${shortValue}`)
-      setNewEvent({ event_type: 'note', value: '' })
+      setNewEvent({ event_type: '', value: '' })
       onSuccess?.()
     } catch (e: any) {
       const errorMsg = e?.message || 'Failed to create event'
@@ -116,7 +117,7 @@ export default function HeadacheEntryForm({
                   ? 'border-[var(--color-neon-lime)] bg-[var(--color-neon-lime)] text-[#0b0b12]' 
                   : 'border-[var(--color-danger)] bg-[var(--color-danger)] text-white'
               }`}
-              onClick={() => setNewHeadache({ ...newHeadache, aura: newHeadache.aura === 1 ? 0 : 1 })}
+              onClick={() => setNewHeadache({ ...newHeadache, aura: (newHeadache.aura === 1 ? 0 : 1) as 0 | 1 })}
               aria-pressed={newHeadache.aura === 1}
               aria-label="Toggle aura"
             >
@@ -139,11 +140,10 @@ export default function HeadacheEntryForm({
           <form onSubmit={onCreateEvent} className="grid sm:grid-cols-3 gap-3">
             <label className="flex flex-col gap-1">
               <span className="text-sm text-[--color-subtle]">Type</span>
-              <input
-                className="rounded-md border border-[color:color-mix(in_oklch,var(--color-neon-cyan)_22%,transparent)] bg-transparent px-2 py-1"
-                type='text'
+              <TypeaheadInput
                 value={newEvent.event_type}
-                onChange={(e) => setNewEvent({ ...newEvent, event_type: e.target.value })}
+                onChange={(value) => setNewEvent({ ...newEvent, event_type: value })}
+                placeholder="Enter event type..."
               />
             </label>
             <label className="flex flex-col gap-1">

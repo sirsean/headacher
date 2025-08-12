@@ -1,5 +1,11 @@
 // Shared TypeScript models and helper types
 
+// Define D1Database type if not available globally
+interface D1Database {
+  // Add minimal interface - this will be properly typed by wrangler types
+  [key: string]: any;
+}
+
 export interface Env {
   DB: D1Database;
 }

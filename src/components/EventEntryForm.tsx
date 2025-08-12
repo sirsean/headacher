@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutations } from '../context/MutationsContext'
 import { useNotifications } from '../context/NotificationContext'
+import TypeaheadInput from './TypeaheadInput'
 
 interface EventEntryFormProps {
   onSuccess?: () => void
@@ -14,7 +15,7 @@ export default function EventEntryForm({
   compact = false 
 }: EventEntryFormProps) {
   const [error, setError] = useState<string | null>(null)
-  const [newEvent, setNewEvent] = useState({ event_type: 'note', value: '' })
+  const [newEvent, setNewEvent] = useState({ event_type: '', value: '' })
   const { addEvent } = useMutations()
   const { success, error: showError } = useNotifications()
 
@@ -41,7 +42,7 @@ export default function EventEntryForm({
       await addEvent(newEvent)
       const shortValue = newEvent.value.length > 20 ? newEvent.value.substring(0, 20) + '...' : newEvent.value
       success(`Event logged: [${newEvent.event_type}] ${shortValue}`)
-      setNewEvent({ event_type: 'note', value: '' })
+      setNewEvent({ event_type: '', value: '' })
       onSuccess?.()
     } catch (e: any) {
       const errorMsg = e?.message || 'Failed to create event'
@@ -70,12 +71,9 @@ export default function EventEntryForm({
         <form onSubmit={onCreateEvent} className="grid sm:grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-sm text-[--color-subtle]">Type</span>
-            <input
-              className="rounded-md border border-[color:color-mix(in_oklch,var(--color-neon-cyan)_22%,transparent)] bg-transparent px-2 py-1"
-              type='text'
+            <TypeaheadInput
               value={newEvent.event_type}
-              onChange={(e) => setNewEvent({ ...newEvent, event_type: e.target.value })}
-              placeholder="medication, trigger, note..."
+              onChange={(v) => setNewEvent({ ...newEvent, event_type: v })}
             />
           </label>
           <label className="flex flex-col gap-1">
@@ -85,7 +83,6 @@ export default function EventEntryForm({
               type='text'
               value={newEvent.value}
               onChange={(e) => setNewEvent({ ...newEvent, value: e.target.value })}
-              placeholder="Details..."
             />
           </label>
           <div className="sm:col-span-2">

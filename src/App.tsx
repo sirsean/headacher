@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import HomePage from './HomePage'
 import DashboardPage from './DashboardPage'
 import EntryPage from './EntryPage.jsx'

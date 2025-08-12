@@ -62,48 +62,6 @@ async function requireAuth(request: Request, env: Env): Promise<string> {
   }
 }
 
-// Common SQL builders to reduce repetition and ensure user scoping
-function buildSelectWithUserScope(table: string, where: string[], params: any[], addr: string): { sql: string; params: any[] } {
-  const userScopedWhere = [...where, 'user_id = ?'];
-  const userScopedParams = [...params, addr];
-  const whereClause = `WHERE ${userScopedWhere.join(' AND ')}`;
-  return {
-    sql: `SELECT * FROM ${table} ${whereClause}`,
-    params: userScopedParams
-  };
-}
-
-function buildInsertWithUserScope(table: string, columns: string[], values: any[], addr: string): { sql: string; params: any[] } {
-  const userScopedColumns = [...columns, 'user_id'];
-  const userScopedValues = [...values, addr];
-  const placeholders = userScopedColumns.map(() => '?').join(', ');
-  return {
-    sql: `INSERT INTO ${table} (${userScopedColumns.join(', ')}) VALUES (${placeholders})`,
-    params: userScopedValues
-  };
-}
-
-function buildUpdateWithUserScope(table: string, fields: string[], params: any[], id: number, addr: string): { sql: string; params: any[] } {
-  const userScopedParams = [...params, id, addr];
-  return {
-    sql: `UPDATE ${table} SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
-    params: userScopedParams
-  };
-}
-
-function buildDeleteWithUserScope(table: string, id: number, addr: string): { sql: string; params: any[] } {
-  return {
-    sql: `DELETE FROM ${table} WHERE id = ? AND user_id = ?`,
-    params: [id, addr]
-  };
-}
-
-function buildSelectByIdWithUserScope(table: string, id: number, addr: string): { sql: string; params: any[] } {
-  return {
-    sql: `SELECT * FROM ${table} WHERE id = ? AND user_id = ?`,
-    params: [id, addr]
-  };
-}
 
 const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   // Health check
@@ -224,7 +182,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   {
     pattern: new URLPattern({ pathname: "/api/dashboard" }),
     methods: ["GET"],
-    handler: requireAuthentication(async (request, env, match, addr) => {
+    handler: requireAuthentication(async (request, env, _match, addr) => {
       const url = new URL(request.url);
       const daysParam = url.searchParams.get("days");
       let days = 30; // default to 30 days
@@ -305,7 +263,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   {
     pattern: new URLPattern({ pathname: "/api/headaches" }),
     methods: ["GET", "POST"],
-    handler: requireAuthentication(async (request, env, match, addr) => {
+    handler: requireAuthentication(async (request, env, _match, addr) => {
       const url = new URL(request.url);
       if (request.method === "GET") {
         // Query params
@@ -446,11 +404,26 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       return withCors(new Response(null, { status: 204 }));
     }),
   },
+  // Event types (must come before /api/events/:id to avoid route conflict)
+  {
+    pattern: new URLPattern({ pathname: "/api/events/types" }),
+    methods: ["GET"],
+    handler: requireAuthentication(async (_request, env, _match, addr) => {
+      const types = await dbAll<{ event_type: string }>(
+        env.DB,
+        "SELECT DISTINCT event_type FROM events WHERE user_id = ? ORDER BY event_type",
+        [addr],
+        (row) => ({ event_type: row.event_type })
+      );
+      
+      return json({ types: types.map(t => t.event_type) });
+    }),
+  },
   // Event collection
   {
     pattern: new URLPattern({ pathname: "/api/events" }),
     methods: ["GET", "POST"],
-    handler: requireAuthentication(async (request, env, match, addr) => {
+    handler: requireAuthentication(async (request, env, _match, addr) => {
       const url = new URL(request.url);
       if (request.method === "GET") {
         // Query params

@@ -121,6 +121,12 @@ export async function deleteEvent(id: number, fetchWithAuth?: AuthenticatedFetch
   if (!res.ok && res.status !== 204) await handleJson(res)
 }
 
+export async function listEventTypes(fetchWithAuth?: AuthenticatedFetch): Promise<{ types: string[] }> {
+  const fetchFn = fetchWithAuth || fetch
+  const res = await fetchFn(`${API_BASE}/api/events/types`)
+  return handleJson(res)
+}
+
 // Dashboard
 export interface DashboardData {
   days_requested: number
