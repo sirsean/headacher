@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { useHeadacheEntries } from './hooks/useHeadacheEntries'
 import { useMutations } from './hooks/useMutations'
 import WalletButton from './components/WalletButton'
+import DatePicker from './components/DatePicker'
+import { dayToUtcRange } from './utils/dateRange'
 
 function getSeverityColor(sev) {
   if (sev <= 3) return 'var(--color-neon-lime)'
@@ -75,11 +78,53 @@ export default function HistoryPage() {
   const [showDeleteHeadaches, setShowDeleteHeadaches] = useState(false)
   const [showDeleteEvents, setShowDeleteEvents] = useState(false)
 
-  const { headaches, events, loading, error, setHeadaches, setEvents, setError } = useHeadacheEntries()
+  const [params, setParams] = useSearchParams();
+  const dateParam = params.get('date') ?? '';
+  const [selectedDate, setSelectedDate] = useState(dateParam);
+
+  const dateRange = selectedDate ? dayToUtcRange(selectedDate) : {};
+
+  const headachesParams = useMemo(() => ({ ...dateRange, limit: 50 }), [selectedDate]);
+  const eventsParams = useMemo(() => ({ ...dateRange, limit: 50 }), [selectedDate]);
+
+  const { headaches, events, loading, error, setHeadaches, setEvents, setError } = useHeadacheEntries({
+    headachesParams,
+    eventsParams
+  })
   const { removeHeadache, removeEvent } = useMutations()
 
   return (
     <div className="space-y-6">
+      <div className="panel">
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <DatePicker
+              value={selectedDate}
+              onChange={(date) => {
+                setSelectedDate(date);
+                if (date) {
+                  params.set('date', date);
+                } else {
+                  params.delete('date');
+                }
+                setParams(params);
+              }}
+              placeholder="Filter by date..."
+            />
+          </div>
+          {selectedDate && (
+            <div className="hidden lg:block text-xs text-[--color-subtle] max-w-48">
+              Showing entries for {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+      
       <div className="flex items-center gap-3">
         {loading && <span className="text-sm text-[--color-subtle]">Loading…</span>}
         {error && <p className="text-sm text-[--color-neon-pink]">Error: {error}</p>}
