@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useAuth } from './context/AuthContext'
+import { useAuth } from './hooks/useAuth'
 import { useHeadacheEntries } from './hooks/useHeadacheEntries'
-import { useMutations } from './context/MutationsContext'
+import { useMutations } from './hooks/useMutations'
 import WalletButton from './components/WalletButton'
 
 function getSeverityColor(sev) {

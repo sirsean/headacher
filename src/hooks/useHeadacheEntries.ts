@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { listHeadaches, listEvents, type ListHeadachesParams, type ListEventsParams } from '../api'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from './useAuth'
 import type { EventItem, Headache } from '../types'
 
 const DEFAULT_HEADACHES_PARAMS: ListHeadachesParams = { limit: 50 };
@@ -33,8 +33,8 @@ export function useHeadacheEntries(options: UseHeadacheEntriesOptions = {}) {
       ])
       setHeadaches(h.items)
       setEvents(e.items)
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load data')
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : String(err)) || 'Failed to load data')
     } finally {
       setLoading(false)
     }

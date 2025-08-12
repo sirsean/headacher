@@ -33,7 +33,7 @@ const requireAuthentication = (h: Handler): Handler => async (req, env, match) =
   return h(req, env, match, addr);
 };
 
-async function readJson<T = any>(request: Request): Promise<T | null> {
+async function readJson<T = Record<string, unknown>>(request: Request): Promise<T | null> {
   try {
     return (await request.json()) as T;
   } catch {
@@ -57,7 +57,7 @@ async function requireAuth(request: Request, env: Env): Promise<string> {
       throw new HttpError(401, "Invalid token: missing subject");
     }
     return address;
-  } catch (err) {
+  } catch {
     throw new HttpError(401, "Invalid or expired token");
   }
 }
@@ -115,7 +115,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
           env.DB,
           "SELECT nonce, issued_at FROM nonces WHERE address = ? ORDER BY issued_at DESC",
           [address],
-          (row) => ({ nonce: row.nonce, issued_at: row.issued_at })
+          (row) => ({ nonce: row.nonce || '', issued_at: row.issued_at || '' })
         );
 
         if (!storedNonce) {
@@ -220,13 +220,21 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
         ORDER BY timestamp
       `;
 
+      interface DashboardRow {
+        timestamp: string;
+        severity?: number;
+        aura?: number;
+        event_type?: string;
+        value?: string;
+      }
+
       const [headaches, events] = await Promise.all([
-        dbAll<any>(env.DB, dailyStatsSQL, [startISO, endISO, addr], (row) => ({
+        dbAll<DashboardRow>(env.DB, dailyStatsSQL, [startISO, endISO, addr], (row) => ({
           timestamp: row.timestamp,
           severity: row.severity,
           aura: row.aura
         })),
-        dbAll<any>(env.DB, eventsSQL, [startISO, endISO, addr], (row) => ({
+        dbAll<DashboardRow>(env.DB, eventsSQL, [startISO, endISO, addr], (row) => ({
           event_type: row.event_type,
           value: row.value,
           timestamp: row.timestamp
@@ -286,7 +294,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
         }
 
         const where: string[] = [];
-        const binds: any[] = [];
+        const binds: unknown[] = [];
 
         if (since && validateTimestamp(since)) {
           where.push("timestamp >= ?");
@@ -316,7 +324,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       }
 
       // POST - create
-      const body = await readJson<any>(request);
+      const body = await readJson<{ severity?: number; aura?: number }>(request);
       if (!body) return error(400, "Invalid JSON body");
 
       const { severity, aura } = body ?? {};
@@ -357,11 +365,11 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       }
 
       if (request.method === "PATCH") {
-        const body = await readJson<any>(request);
+        const body = await readJson<{ timestamp?: string; severity?: number; aura?: number }>(request);
         if (!body) return error(400, "Invalid JSON body");
 
         const fields: string[] = [];
-        const binds: any[] = [];
+        const binds: unknown[] = [];
         const errors: Record<string, string> = {};
 
         if ("timestamp" in body) {
@@ -413,7 +421,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
         env.DB,
         "SELECT DISTINCT event_type FROM events WHERE user_id = ? ORDER BY event_type",
         [addr],
-        (row) => ({ event_type: row.event_type })
+        (row) => ({ event_type: row.event_type || '' })
       );
       
       return json({ types: types.map(t => t.event_type) });
@@ -445,7 +453,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
         }
 
         const where: string[] = [];
-        const binds: any[] = [];
+        const binds: unknown[] = [];
 
         if (since && validateTimestamp(since)) {
           where.push("timestamp >= ?");
@@ -473,7 +481,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       }
 
       // POST - create
-      const body = await readJson<any>(request);
+      const body = await readJson<{ event_type?: string; value?: string }>(request);
       if (!body) return error(400, "Invalid JSON body");
 
       const { event_type, value } = body ?? {};
@@ -513,11 +521,11 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       }
 
       if (request.method === "PATCH") {
-        const body = await readJson<any>(request);
+        const body = await readJson<{ timestamp?: string; event_type?: string; value?: string }>(request);
         if (!body) return error(400, "Invalid JSON body");
 
         const fields: string[] = [];
-        const binds: any[] = [];
+        const binds: unknown[] = [];
         const errors: Record<string, string> = {};
 
         if ("timestamp" in body) {
@@ -572,7 +580,7 @@ export default {
       if (!r.methods.includes(request.method)) continue;
       try {
         return await r.handler(request, env, match);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (e instanceof HttpError) {
           return e.response;
         }

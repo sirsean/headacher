@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAuth } from './context/AuthContext'
+import { useAuth } from './hooks/useAuth'
 import DashboardChart from './components/DashboardChart'
 import WalletButton from './components/WalletButton'
 import type { DashboardData } from './api'

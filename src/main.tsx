@@ -4,9 +4,9 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import NavigationBar from './components/NavigationBar'
-import { AuthProvider } from './context/AuthContext'
-import { MutationsProvider } from './context/MutationsContext'
-import { NotificationProvider } from './context/NotificationContext'
+import { AuthProvider } from './context/AuthContext.tsx'
+import { MutationsProvider } from './context/MutationsContext.tsx'
+import { NotificationProvider } from './context/NotificationContext.tsx'
 import NotificationContainer from './components/NotificationContainer'
 
 createRoot(document.getElementById('root')!).render(

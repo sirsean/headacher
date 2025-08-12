@@ -119,7 +119,21 @@ export function isInt(n: unknown): n is number {
 }
 
 // Typed row mappers
-export function mapHeadache(row: any): Headache {
+interface DbRow {
+  id?: number;
+  timestamp: string;
+  severity?: number;
+  aura?: number;
+  event_type?: string;
+  value?: string;
+  user_id?: string;
+  // Nonce table fields
+  nonce?: string;
+  issued_at?: string;
+  address?: string;
+}
+
+export function mapHeadache(row: DbRow): Headache {
   return {
     id: row.id != null ? Number(row.id) : undefined,
     timestamp: String(row.timestamp),
@@ -129,7 +143,7 @@ export function mapHeadache(row: any): Headache {
   };
 }
 
-export function mapEvent(row: any): EventItem {
+export function mapEvent(row: DbRow): EventItem {
   return {
     id: row.id != null ? Number(row.id) : undefined,
     timestamp: String(row.timestamp),
@@ -143,28 +157,28 @@ export function mapEvent(row: any): EventItem {
 export async function dbAll<T>(
   db: D1Database,
   sql: string,
-  binds: any[],
-  map: (row: any) => T
+  binds: unknown[],
+  map: (row: DbRow) => T
 ): Promise<T[]> {
   const { results } = await db.prepare(sql).bind(...binds).all();
-  const rows = (results ?? []) as any[];
+  const rows = (results ?? []) as unknown as DbRow[];
   return rows.map(map);
 }
 
 export async function dbFirst<T>(
   db: D1Database,
   sql: string,
-  binds: any[],
-  map: (row: any) => T
+  binds: unknown[],
+  map: (row: DbRow) => T
 ): Promise<T | null> {
   const row = await db.prepare(sql).bind(...binds).first();
-  return row ? map(row) : null;
+  return row ? map(row as unknown as DbRow) : null;
 }
 
 export async function dbRun(
   db: D1Database,
   sql: string,
-  binds: any[]
+  binds: unknown[]
 ): Promise<D1Result> {
   return db.prepare(sql).bind(...binds).run();
 }

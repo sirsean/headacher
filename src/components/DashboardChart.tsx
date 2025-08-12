@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend, ReferenceDot } from 'recharts'
 import { getDashboardData, type DashboardData } from '../api'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../hooks/useAuth'
 
 // Helper function to get local date string from UTC timestamp
 function getLocalDateString(utcTimestamp: string): string {
@@ -85,7 +85,7 @@ interface ChartDataPoint {
   }>
 }
 
-function CustomTooltip({ active, payload }: any) {
+function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ChartDataPoint }> }) {
   if (!active || !payload || !payload.length) return null
   
   const data = payload[0].payload as ChartDataPoint
@@ -147,24 +147,24 @@ export default function DashboardChart({
   const [days, setDays] = useState(initialDays)
   const { fetchWithAuth } = useAuth()
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const dashboardData = await getDashboardData(days, fetchWithAuth)
       setData(dashboardData)
       onDataChange?.(dashboardData)
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load dashboard data')
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : String(e)) || 'Failed to load dashboard data')
       onDataChange?.(null)
     } finally {
       setLoading(false)
     }
-  }
+  }, [days, fetchWithAuth, onDataChange])
 
   useEffect(() => {
     loadData()
-  }, [days, refreshTrigger])
+  }, [days, refreshTrigger, loadData])
 
   const chartData: ChartDataPoint[] = data ? aggregateDataByLocalDate(data.headaches, data.events, data.days_requested) : []
 

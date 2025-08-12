@@ -1,11 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 // Mock D1 database interface for smoke tests
+interface MockRow {
+  id: number;
+  timestamp: string;
+  severity?: number;
+  aura?: number;
+  event_type?: string;
+  value?: string;
+  user_id: string;
+}
+
 interface MockD1Database {
   prepare: (sql: string) => {
-    bind: (...params: any[]) => {
-      first: () => Promise<any | null>;
-      all: () => Promise<{ results: any[] }>;
+    bind: (...params: unknown[]) => {
+      first: () => Promise<MockRow | null>;
+      all: () => Promise<{ results: MockRow[] }>;
       run: () => Promise<{ meta: { last_row_id: number; changes: number } }>;
     };
   };
@@ -14,8 +24,8 @@ interface MockD1Database {
 // Create a simplified mock database for smoke tests
 const createSmokeTestDB = (): MockD1Database => {
   const mockData = {
-    headaches: new Map<number, any>(),
-    events: new Map<number, any>(),
+    headaches: new Map<number, MockRow>(),
+    events: new Map<number, MockRow>(),
     users: new Set<string>()
   };
 
@@ -23,7 +33,7 @@ const createSmokeTestDB = (): MockD1Database => {
 
   return {
     prepare: (sql: string) => ({
-      bind: (...params: any[]) => ({
+      bind: (...params: unknown[]) => ({
         first: async () => {
           if (sql.includes('SELECT * FROM headaches WHERE id = ? AND user_id = ?')) {
             const [id, userId] = params;
@@ -38,7 +48,7 @@ const createSmokeTestDB = (): MockD1Database => {
           return null;
         },
         all: async () => {
-          const results: any[] = [];
+          const results: MockRow[] = [];
           
           if (sql.includes('SELECT * FROM headaches') && sql.includes('user_id = ?')) {
             // For headaches list queries, user_id is typically the last or second-to-last parameter
@@ -55,7 +65,7 @@ const createSmokeTestDB = (): MockD1Database => {
               userId = params[params.length - 1];
             }
             
-            for (const [id, headache] of mockData.headaches) {
+            for (const [, headache] of mockData.headaches) {
               if (headache.user_id === userId) {
                 // Apply date filtering if present
                 if (sql.includes('timestamp >= ?') && sql.includes('timestamp <= ?')) {
@@ -98,7 +108,7 @@ const createSmokeTestDB = (): MockD1Database => {
               userId = params[params.length - 1];
             }
             
-            for (const [id, event] of mockData.events) {
+            for (const [, event] of mockData.events) {
               if (event.user_id === userId) {
                 // Apply date filtering if present
                 if (sql.includes('timestamp >= ?') && sql.includes('timestamp <= ?')) {
@@ -128,8 +138,8 @@ const createSmokeTestDB = (): MockD1Database => {
           
           // Handle dashboard queries
           if (sql.includes('SELECT timestamp, severity, aura FROM headaches')) {
-            const userId = params[params.length - 1];
-            for (const [id, headache] of mockData.headaches) {
+            const userId = params[params.length - 1] as string;
+            for (const [, headache] of mockData.headaches) {
               if (headache.user_id === userId) {
                 const headacheTimestamp = new Date(headache.timestamp);
                 const startTime = new Date(params[0]);
@@ -146,8 +156,8 @@ const createSmokeTestDB = (): MockD1Database => {
           }
           
           if (sql.includes('SELECT event_type, value, timestamp FROM events')) {
-            const userId = params[params.length - 1];
-            for (const [id, event] of mockData.events) {
+            const userId = params[params.length - 1] as string;
+            for (const [, event] of mockData.events) {
               if (event.user_id === userId) {
                 const eventTimestamp = new Date(event.timestamp);
                 const startTime = new Date(params[0]);
@@ -428,10 +438,10 @@ describe('Smoke Tests - Basic Create/List Flows', () => {
   describe('Dashboard Data Flow', () => {
     it('should retrieve dashboard data correctly', async () => {
       // Create test data
-      const headacheResult = await mockDB.prepare('INSERT INTO headaches (timestamp, severity, aura, user_id) VALUES (?, ?, ?, ?)')
+      await mockDB.prepare('INSERT INTO headaches (timestamp, severity, aura, user_id) VALUES (?, ?, ?, ?)')
         .bind('2024-01-15T10:00:00Z', 7, 1, testUser).run();
       
-      const eventResult = await mockDB.prepare('INSERT INTO events (timestamp, event_type, value, user_id) VALUES (?, ?, ?, ?)')
+      await mockDB.prepare('INSERT INTO events (timestamp, event_type, value, user_id) VALUES (?, ?, ?, ?)')
         .bind('2024-01-15T09:00:00Z', 'medication', 'ibuprofen', testUser).run();
 
       // Query dashboard data (simulating the dashboard endpoint)

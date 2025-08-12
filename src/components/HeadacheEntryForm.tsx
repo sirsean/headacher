@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useMutations } from '../context/MutationsContext'
-import { useNotifications } from '../context/NotificationContext'
+import { useMutations } from '../hooks/useMutations'
+import { useNotifications } from '../hooks/useNotifications'
 import TypeaheadInput from './TypeaheadInput'
 
 function getSeverityColor(sev: number): string {
@@ -36,8 +36,8 @@ export default function HeadacheEntryForm({
       setNewHeadache({ severity: 5, aura: 0 as 0 | 1 })
       success(`Headache recorded (severity: ${newHeadache.severity}${newHeadache.aura ? ', with aura' : ''})`)
       onSuccess?.()
-    } catch (e: any) {
-      const errorMsg = e?.message || 'Failed to create headache'
+    } catch (e: unknown) {
+      const errorMsg = (e instanceof Error ? e.message : String(e)) || 'Failed to create headache'
       setError(errorMsg)
       showError(errorMsg)
     }
@@ -69,8 +69,8 @@ export default function HeadacheEntryForm({
       setNewEvent({ event_type: '', value: '' })
       setTypeaheadReload(r => r + 1)
       onSuccess?.()
-    } catch (e: any) {
-      const errorMsg = e?.message || 'Failed to create event'
+    } catch (e: unknown) {
+      const errorMsg = (e instanceof Error ? e.message : String(e)) || 'Failed to create event'
       setError(errorMsg)
       showError(errorMsg)
     }
@@ -105,9 +105,9 @@ export default function HeadacheEntryForm({
               value={newHeadache.severity}
               onChange={(e) => setNewHeadache({ ...newHeadache, severity: Number(e.target.value) })}
               style={{ 
-                ['--percent' as any]: `${(newHeadache.severity / 10) * 100}%`, 
-                ['--sev-color' as any]: getSeverityColor(newHeadache.severity) 
-              }}
+                ['--percent' as string]: `${(newHeadache.severity / 10) * 100}%`, 
+                ['--sev-color' as string]: getSeverityColor(newHeadache.severity) 
+              } as React.CSSProperties}
             />
           </label>
           <div className="flex flex-col gap-1">

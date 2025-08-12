@@ -1,8 +1,9 @@
-import { createContext, useContext, useMemo, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { useMemo, useState, useCallback, useEffect, type ReactNode } from 'react'
 import { createConfig, http, connect as wagmiConnect, disconnect as wagmiDisconnect, signMessage, getAccount } from '@wagmi/core'
 import { mainnet, sepolia } from '@wagmi/core/chains'
 import { injected, walletConnect } from '@wagmi/connectors'
 import { SiweMessage } from 'siwe'
+import { AuthContext } from './AuthContext'
 
 // Configure wagmi with WalletConnect for mobile support
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
@@ -26,22 +27,6 @@ const config = createConfig({
     [sepolia.id]: http(),
   },
 })
-
-interface AuthContextValue {
-  connect: () => Promise<void>
-  disconnect: () => Promise<void>
-  address: string | null
-  loading: boolean
-  fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined)
-
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within <AuthProvider>')
-  return ctx
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null)

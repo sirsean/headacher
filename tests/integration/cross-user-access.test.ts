@@ -1,36 +1,41 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 // Mock D1 database interface
+interface MockRow {
+  id: number;
+  timestamp: string;
+  severity?: number;
+  aura?: number;
+  event_type?: string;
+  value?: string;
+  user_id: string;
+}
+
 interface MockD1Database {
   prepare: (sql: string) => {
-    bind: (...params: any[]) => {
-      first: () => Promise<any | null>;
-      all: () => Promise<{ results: any[] }>;
+    bind: (...params: unknown[]) => {
+      first: () => Promise<MockRow | null>;
+      all: () => Promise<{ results: MockRow[] }>;
       run: () => Promise<{ meta: { last_row_id: number; changes: number } }>;
     };
   };
 }
 
-// Mock environment
-interface MockEnv {
-  DB: MockD1Database;
-  JWT_SECRET: string;
-}
 
 // Create mock implementations for testing cross-user access
 const createMockDB = (): MockD1Database => {
   const mockData = {
-    headaches: new Map<number, any>(),
-    events: new Map<number, any>(),
+    headaches: new Map<number, MockRow>(),
+    events: new Map<number, MockRow>(),
     users: new Set<string>(),
-    nonces: new Map<string, any>()
+    nonces: new Map<string, { nonce: string; issued_at: string }>()
   };
 
   let nextId = 1;
 
   return {
     prepare: (sql: string) => ({
-      bind: (...params: any[]) => ({
+      bind: (...params: unknown[]) => ({
         first: async () => {
           // Simulate user scoped queries
           if (sql.includes('SELECT * FROM headaches WHERE id = ? AND user_id = ?')) {
@@ -46,18 +51,18 @@ const createMockDB = (): MockD1Database => {
           return null;
         },
         all: async () => {
-          const results: any[] = [];
+          const results: MockRow[] = [];
           if (sql.includes('SELECT * FROM headaches') && sql.includes('user_id = ?')) {
-            const userId = params[params.length - 1];
-            for (const [id, headache] of mockData.headaches) {
+            const userId = params[params.length - 1] as string;
+            for (const [, headache] of mockData.headaches) {
               if (headache.user_id === userId) {
                 results.push(headache);
               }
             }
           }
           if (sql.includes('SELECT * FROM events') && sql.includes('user_id = ?')) {
-            const userId = params[params.length - 1];
-            for (const [id, event] of mockData.events) {
+            const userId = params[params.length - 1] as string;
+            for (const [, event] of mockData.events) {
               if (event.user_id === userId) {
                 results.push(event);
               }
@@ -65,8 +70,8 @@ const createMockDB = (): MockD1Database => {
           }
           // Handle dashboard specific queries
           if (sql.includes('SELECT timestamp, severity, aura FROM headaches')) {
-            const userId = params[params.length - 1];
-            for (const [id, headache] of mockData.headaches) {
+            const userId = params[params.length - 1] as string;
+            for (const [, headache] of mockData.headaches) {
               if (headache.user_id === userId) {
                 const headacheTimestamp = new Date(headache.timestamp);
                 const startTime = new Date(params[0]);
@@ -82,8 +87,8 @@ const createMockDB = (): MockD1Database => {
             }
           }
           if (sql.includes('SELECT event_type, value, timestamp FROM events')) {
-            const userId = params[params.length - 1];
-            for (const [id, event] of mockData.events) {
+            const userId = params[params.length - 1] as string;
+            for (const [, event] of mockData.events) {
               if (event.user_id === userId) {
                 const eventTimestamp = new Date(event.timestamp);
                 const startTime = new Date(params[0]);
@@ -160,20 +165,6 @@ const createMockDB = (): MockD1Database => {
   };
 };
 
-// Mock request helper
-const createMockRequest = (method: string, url: string, body?: any, authHeader?: string): Request => {
-  const headers = new Headers();
-  headers.set('Content-Type', 'application/json');
-  if (authHeader) {
-    headers.set('Authorization', authHeader);
-  }
-
-  return new Request(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined
-  });
-};
 
 // Mock authentication token generator
 const generateMockToken = (userAddress: string): string => {
@@ -199,7 +190,6 @@ describe('Cross-User Access Integration Tests', () => {
   const user2Address = '0x2222222222222222222222222222222222222222';
   
   let mockDB: MockD1Database;
-  let mockEnv: MockEnv;
   let user1Token: string;
   let user2Token: string;
   let user1HeadacheId: number;
@@ -209,10 +199,6 @@ describe('Cross-User Access Integration Tests', () => {
 
   beforeEach(async () => {
     mockDB = createMockDB();
-    mockEnv = {
-      DB: mockDB,
-      JWT_SECRET: 'test-secret-key-for-testing-only'
-    };
 
     user1Token = generateMockToken(user1Address);
     user2Token = generateMockToken(user2Address);

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { useAuth } from './context/AuthContext'
+import { useAuth } from './hooks/useAuth'
 import DashboardChart from './components/DashboardChart'
 import HeadacheEntryForm from './components/HeadacheEntryForm'
 import EventEntryForm from './components/EventEntryForm'

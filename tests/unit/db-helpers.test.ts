@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 // Since the DB helper functions are not exported, we'll recreate them here for testing
 // In a real-world scenario, these would be extracted to a separate utility module
 
-function buildSelectWithUserScope(table: string, where: string[], params: any[], addr: string): { sql: string; params: any[] } {
+function buildSelectWithUserScope(table: string, where: string[], params: unknown[], addr: string): { sql: string; params: unknown[] } {
   const userScopedWhere = [...where, 'user_id = ?'];
   const userScopedParams = [...params, addr];
   const whereClause = `WHERE ${userScopedWhere.join(' AND ')}`;
@@ -13,7 +13,7 @@ function buildSelectWithUserScope(table: string, where: string[], params: any[],
   };
 }
 
-function buildInsertWithUserScope(table: string, columns: string[], values: any[], addr: string): { sql: string; params: any[] } {
+function buildInsertWithUserScope(table: string, columns: string[], values: unknown[], addr: string): { sql: string; params: unknown[] } {
   const userScopedColumns = [...columns, 'user_id'];
   const userScopedValues = [...values, addr];
   const placeholders = userScopedColumns.map(() => '?').join(', ');
@@ -23,7 +23,7 @@ function buildInsertWithUserScope(table: string, columns: string[], values: any[
   };
 }
 
-function buildUpdateWithUserScope(table: string, fields: string[], params: any[], id: number, addr: string): { sql: string; params: any[] } {
+function buildUpdateWithUserScope(table: string, fields: string[], params: unknown[], id: number, addr: string): { sql: string; params: unknown[] } {
   const userScopedParams = [...params, id, addr];
   return {
     sql: `UPDATE ${table} SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
@@ -31,14 +31,14 @@ function buildUpdateWithUserScope(table: string, fields: string[], params: any[]
   };
 }
 
-function buildDeleteWithUserScope(table: string, id: number, addr: string): { sql: string; params: any[] } {
+function buildDeleteWithUserScope(table: string, id: number, addr: string): { sql: string; params: unknown[] } {
   return {
     sql: `DELETE FROM ${table} WHERE id = ? AND user_id = ?`,
     params: [id, addr]
   };
 }
 
-function buildSelectByIdWithUserScope(table: string, id: number, addr: string): { sql: string; params: any[] } {
+function buildSelectByIdWithUserScope(table: string, id: number, addr: string): { sql: string; params: unknown[] } {
   return {
     sql: `SELECT * FROM ${table} WHERE id = ? AND user_id = ?`,
     params: [id, addr]

@@ -3,7 +3,23 @@
 // Define D1Database type if not available globally
 interface D1Database {
   // Add minimal interface - this will be properly typed by wrangler types
-  [key: string]: any;
+  exec(query: string): Promise<D1Result>;
+  prepare(query: string): D1PreparedStatement;
+  dump(): Promise<ArrayBuffer>;
+  batch(statements: D1PreparedStatement[]): Promise<D1Result[]>;
+}
+
+interface D1Result {
+  results?: Record<string, unknown>[];
+  success: boolean;
+  meta: Record<string, unknown>;
+}
+
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first<T = Record<string, unknown>>(colName?: string): Promise<T | null>;
+  run(): Promise<D1Result>;
+  all<T = Record<string, unknown>>(): Promise<D1Result & { results: T[] }>;
 }
 
 export interface Env {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useMutations } from '../context/MutationsContext'
-import { useNotifications } from '../context/NotificationContext'
+import { useMutations } from '../hooks/useMutations'
+import { useNotifications } from '../hooks/useNotifications'
 import TypeaheadInput from './TypeaheadInput'
 
 interface EventEntryFormProps {
@@ -46,8 +46,8 @@ export default function EventEntryForm({
       setNewEvent({ event_type: '', value: '' })
       setTypeaheadReload(r => r + 1)
       onSuccess?.()
-    } catch (e: any) {
-      const errorMsg = e?.message || 'Failed to create event'
+    } catch (e: unknown) {
+      const errorMsg = (e instanceof Error ? e.message : String(e)) || 'Failed to create event'
       setError(errorMsg)
       showError(errorMsg)
     }

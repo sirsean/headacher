@@ -1,4 +1,4 @@
-import { useAuth } from './context/AuthContext'
+import { useAuth } from './hooks/useAuth'
 import HeadacheEntryForm from './components/HeadacheEntryForm'
 import EventEntryForm from './components/EventEntryForm'
 import WalletButton from './components/WalletButton'

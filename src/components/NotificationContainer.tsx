@@ -1,4 +1,4 @@
-import { useNotifications } from '../context/NotificationContext'
+import { useNotifications } from '../hooks/useNotifications'
 
 function NotificationItem({ notification, onDismiss }: { 
   notification: { id: string; message: string; type: 'success' | 'error' | 'info' | 'warning' }

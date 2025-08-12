@@ -9,7 +9,7 @@ type AuthenticatedFetch = (url: string, options?: RequestInit) => Promise<Respon
 async function handleJson<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const err = (data as any)?.error ?? { status: res.status, message: res.statusText }
+    const err = (data as { error?: { status?: number; message?: string; details?: unknown } })?.error ?? { status: res.status, message: res.statusText }
     const e = new Error(err.message || 'Request failed') as Error & { status?: number; details?: unknown }
     e.status = err.status ?? res.status
     e.details = err.details
