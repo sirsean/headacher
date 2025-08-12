@@ -3,7 +3,8 @@ import type { EventItem, Headache } from "../src/types";
 export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Requested-With",
+  "Access-Control-Expose-Headers": "Authorization",
   "Access-Control-Max-Age": "86400",
 };
 

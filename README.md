@@ -11,6 +11,48 @@ Endpoints live under /api and support CORS for browser clients.
 - Node 20+
 - Wrangler (installed via devDependencies): npx wrangler
 
+## Environment Setup
+
+### JWT Secret Key
+
+The application requires a JWT secret key for authentication. You need to generate and configure this secret both locally and in the Cloudflare environment.
+
+#### Generating the Secret
+
+Generate a secure random key using OpenSSL:
+
+```bash
+openssl rand -base64 32
+```
+
+This will output a base64-encoded string like: `WFdkKCFqJgMS32q5k336mlfSWr4ABvSbl3DyJP9QlBg=`
+
+#### Setting the Secret in Cloudflare (Production)
+
+To set the secret in your Cloudflare Worker environment:
+
+```bash
+echo "YOUR_GENERATED_SECRET_HERE" | wrangler secret put JWT_SECRET_KEY
+```
+
+Replace `YOUR_GENERATED_SECRET_HERE` with the actual secret generated from the OpenSSL command.
+
+#### Setting the Secret Locally (Development)
+
+For local development, you can set the secret as an environment variable in your `.dev.vars` file (create this file in your project root if it doesn't exist):
+
+```
+JWT_SECRET_KEY=YOUR_GENERATED_SECRET_HERE
+```
+
+Alternatively, you can set it as a system environment variable:
+
+```bash
+export JWT_SECRET_KEY="YOUR_GENERATED_SECRET_HERE"
+```
+
+**Important:** Never commit your `.dev.vars` file or actual secret values to version control. Add `.dev.vars` to your `.gitignore` file.
+
 ## Local development with D1
 
 1) Apply migrations to local D1 (uses preview_database_id from wrangler.toml):

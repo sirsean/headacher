@@ -1,17 +1,64 @@
 import { json, ok, withCors, error, validateTimestamp, isInt, toISO, dbAll, dbFirst, dbRun, mapHeadache, mapEvent, HttpError } from "./utils";
 import type { EventItem, Headache } from "../src/types";
+import { generateNonce, SiweMessage } from "siwe";
+import { SignJWT, jwtVerify } from "jose";
+
+// Convert JWT_SECRET string to CryptoKey for use with jose
+let jwtSecretKey: CryptoKey | null = null;
+
+async function getJwtSecretKey(env: Env): Promise<CryptoKey> {
+	if (!jwtSecretKey) {
+		const secretBytes = new TextEncoder().encode(env.JWT_SECRET);
+		jwtSecretKey = await crypto.subtle.importKey(
+			'raw',
+			secretBytes,
+			{ name: 'HMAC', hash: 'SHA-256' },
+			false,
+			['sign', 'verify']
+		);
+	}
+	return jwtSecretKey;
+}
 
 type Handler = (
   request: Request,
   env: Env,
-  match: URLPatternResult
+  match: URLPatternResult,
+  addr?: string
 ) => Response | Promise<Response>;
+
+// Higher-order handler to wrap authenticated routes
+const requireAuthentication = (h: Handler): Handler => async (req, env, match) => {
+  const addr = await requireAuth(req, env); // throws HttpError 401 on failure
+  return h(req, env, match, addr);
+};
 
 async function readJson<T = any>(request: Request): Promise<T | null> {
   try {
     return (await request.json()) as T;
   } catch {
     return null;
+  }
+}
+
+// Helper function to require authentication
+async function requireAuth(request: Request, env: Env): Promise<string> {
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw new HttpError(401, "Missing or invalid authorization header");
+  }
+
+  const token = authHeader.slice(7); // Remove "Bearer " prefix
+  try {
+    const secretKey = await getJwtSecretKey(env);
+    const { payload } = await jwtVerify(token, secretKey);
+    const address = payload.sub;
+    if (!address) {
+      throw new HttpError(401, "Invalid token: missing subject");
+    }
+    return address;
+  } catch (err) {
+    throw new HttpError(401, "Invalid or expired token");
   }
 }
 
@@ -22,11 +69,119 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
     methods: ["GET"],
     handler: async () => ok(),
   },
+  // Auth: Generate nonce
+  {
+    pattern: new URLPattern({ pathname: "/api/auth/nonce" }),
+    methods: ["GET"],
+    handler: async (request, env) => {
+      const url = new URL(request.url);
+      const address = url.searchParams.get("address");
+      if (!address) {
+        return error(400, "Missing address parameter");
+      }
+
+      // Generate a unique nonce
+      const nonce = generateNonce();
+      const now = new Date().toISOString();
+
+      // Upsert nonce into database
+      await dbRun(
+        env.DB,
+        "INSERT OR REPLACE INTO nonces (address, nonce, issued_at) VALUES (?, ?, ?)",
+        [address, nonce, now]
+      );
+
+      return json({ nonce });
+    },
+  },
+  // Auth: Verify SIWE signature
+  {
+    pattern: new URLPattern({ pathname: "/api/auth/verify" }),
+    methods: ["POST"],
+    handler: async (request, env) => {
+      const body = await readJson<{ message: string; signature: string }>(request);
+      if (!body || !body.message || !body.signature) {
+        return error(400, "Missing message or signature");
+      }
+
+      try {
+        // Parse and validate the SIWE message from prepared string
+        const siweMessage = new SiweMessage(body.message);
+        const address = siweMessage.address;
+
+        // Fetch stored nonce for this address
+        const storedNonce = await dbFirst<{ nonce: string; issued_at: string }>(
+          env.DB,
+          "SELECT nonce, issued_at FROM nonces WHERE address = ? ORDER BY issued_at DESC",
+          [address],
+          (row) => ({ nonce: row.nonce, issued_at: row.issued_at })
+        );
+
+        if (!storedNonce) {
+          return error(401, "No nonce found for this address");
+        }
+
+        // Check if nonce matches
+        if (siweMessage.nonce !== storedNonce.nonce) {
+          return error(401, "Invalid nonce");
+        }
+
+        // Check if nonce is expired (5 minutes)
+        const issuedTime = new Date(storedNonce.issued_at).getTime();
+        const now = new Date().getTime();
+        const fiveMinutes = 5 * 60 * 1000;
+        if (now - issuedTime > fiveMinutes) {
+          return error(401, "Nonce expired");
+        }
+
+        // Verify the signature
+        const verification = await siweMessage.verify({ signature: body.signature });
+        if (!verification.success) {
+          return error(401, "Invalid signature");
+        }
+
+        // Insert address into users table if new
+        await dbRun(
+          env.DB,
+          "INSERT OR IGNORE INTO users (address) VALUES (?)",
+          [address]
+        );
+
+        // Delete the used nonce
+        await dbRun(
+          env.DB,
+          "DELETE FROM nonces WHERE address = ?",
+          [address]
+        );
+
+        // Issue JWT token
+        const secretKey = await getJwtSecretKey(env);
+        const jwt = await new SignJWT({ sub: address })
+          .setProtectedHeader({ alg: 'HS256' })
+          .setIssuedAt()
+          .setExpirationTime('7d')
+          .sign(secretKey);
+
+        return json({ token: jwt });
+      } catch (err) {
+        console.error("SIWE verification error:", err);
+        return error(401, "Authentication failed");
+      }
+    },
+  },
+  // Auth: Logout (client-side only - just return success)
+  {
+    pattern: new URLPattern({ pathname: "/api/auth/logout" }),
+    methods: ["POST"],
+    handler: async () => {
+      return json({ success: true, message: "Logged out successfully" });
+    },
+  },
   // Dashboard data
   {
     pattern: new URLPattern({ pathname: "/api/dashboard" }),
     methods: ["GET"],
-    handler: async (request, env) => {
+    handler: requireAuthentication(async (request, env) => {
       const url = new URL(request.url);
       const daysParam = url.searchParams.get("days");
       let days = 30; // default to 30 days
@@ -84,7 +239,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
         headaches,
         events
       });
-    },
+    }),
   },
   // CORS preflight for all /api/*
   {
@@ -107,7 +262,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
   {
     pattern: new URLPattern({ pathname: "/api/headaches" }),
     methods: ["GET", "POST"],
-    handler: async (request, env) => {
+    handler: requireAuthentication(async (request, env) => {
       const url = new URL(request.url);
       if (request.method === "GET") {
         // Query params
@@ -179,13 +334,13 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       const id = res.meta.last_row_id;
       const item = await dbFirst<Headache>(env.DB, "SELECT * FROM headaches WHERE id = ?", [id], mapHeadache);
       return json(item, 201, { Location: `/api/headaches/${id}` });
-    },
+    }),
   },
   // Headache item
   {
     pattern: new URLPattern({ pathname: "/api/headaches/:id" }),
     methods: ["GET", "PATCH", "DELETE"],
-    handler: async (request, env, match) => {
+    handler: requireAuthentication(async (request, env, match) => {
       const idStr = match.pathname.groups.id;
       const id = Number(idStr);
       if (!Number.isFinite(id) || id < 1) return error(400, "Invalid id");
@@ -242,13 +397,13 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       const del = await dbRun(env.DB, "DELETE FROM headaches WHERE id = ?", [id]);
       if (del.meta.changes === 0) return error(404, "Not found");
       return withCors(new Response(null, { status: 204 }));
-    },
+    }),
   },
   // Event collection
   {
     pattern: new URLPattern({ pathname: "/api/events" }),
     methods: ["GET", "POST"],
-    handler: async (request, env) => {
+    handler: requireAuthentication(async (request, env) => {
       const url = new URL(request.url);
       if (request.method === "GET") {
         // Query params
@@ -316,13 +471,13 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       const id = res.meta.last_row_id;
       const item = await dbFirst<EventItem>(env.DB, "SELECT * FROM events WHERE id = ?", [id], mapEvent);
       return json(item, 201, { Location: `/api/events/${id}` });
-    },
+    }),
   },
   // Event item
   {
     pattern: new URLPattern({ pathname: "/api/events/:id" }),
     methods: ["GET", "PATCH", "DELETE"],
-    handler: async (request, env, match) => {
+    handler: requireAuthentication(async (request, env, match) => {
       const idStr = match.pathname.groups.id;
       const id = Number(idStr);
       if (!Number.isFinite(id) || id < 1) return error(400, "Invalid id");
@@ -379,7 +534,7 @@ const routes: { pattern: URLPattern; methods: string[]; handler: Handler }[] = [
       const del = await dbRun(env.DB, "DELETE FROM events WHERE id = ?", [id]);
       if (del.meta.changes === 0) return error(404, "Not found");
       return withCors(new Response(null, { status: 204 }));
-    },
+    }),
   },
 ];
 

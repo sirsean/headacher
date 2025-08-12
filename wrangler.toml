@@ -1,10 +1,16 @@
 name = "headacher"
 main = "worker/index.ts"
 compatibility_date = "2025-08-10"
+compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "headacher"
 database_id = "<production-db-id>"
 preview_database_id = "headacher"
+
+# JWT Secret Key (generate with: wrangler secret put JWT_SECRET_KEY)
+# For development, we'll use a text-based secret that gets converted to CryptoKey
+[vars]
+JWT_SECRET = "your-development-jwt-secret-key-here-replace-with-proper-secret"
 

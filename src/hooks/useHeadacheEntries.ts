@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { listHeadaches, listEvents, type ListHeadachesParams, type ListEventsParams } from '../api'
+import { useAuth } from '../context/AuthContext'
 import type { EventItem, Headache } from '../types'
 
 const DEFAULT_HEADACHES_PARAMS: ListHeadachesParams = { limit: 50 };
@@ -20,14 +21,15 @@ export function useHeadacheEntries(options: UseHeadacheEntriesOptions = {}) {
   const [events, setEvents] = useState<EventItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { fetchWithAuth } = useAuth()
 
   const refresh = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const [h, e] = await Promise.all([
-        listHeadaches(headachesParams),
-        listEvents(eventsParams),
+        listHeadaches(headachesParams, fetchWithAuth),
+        listEvents(eventsParams, fetchWithAuth),
       ])
       setHeadaches(h.items)
       setEvents(e.items)
@@ -36,7 +38,7 @@ export function useHeadacheEntries(options: UseHeadacheEntriesOptions = {}) {
     } finally {
       setLoading(false)
     }
-  }, [headachesParams, eventsParams])
+  }, [headachesParams, eventsParams, fetchWithAuth])
 
   useEffect(() => {
     // Fetch only when the page that uses this hook mounts

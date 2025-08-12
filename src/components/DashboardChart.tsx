@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend, ReferenceDot } from 'recharts'
 import { getDashboardData, type DashboardData } from '../api'
+import { useAuth } from '../context/AuthContext'
 
 // Helper function to get local date string from UTC timestamp
 function getLocalDateString(utcTimestamp: string): string {
@@ -142,12 +143,13 @@ export default function DashboardChart({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [days, setDays] = useState(initialDays)
+  const { fetchWithAuth } = useAuth()
 
   const loadData = async () => {
     setLoading(true)
     setError(null)
     try {
-      const dashboardData = await getDashboardData(days)
+      const dashboardData = await getDashboardData(days, fetchWithAuth)
       setData(dashboardData)
       onDataChange?.(dashboardData)
     } catch (e: any) {

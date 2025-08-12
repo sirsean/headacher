@@ -37,3 +37,16 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Index to accelerate lookups by key (redundant with UNIQUE but explicit for clarity)
 CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
+
+-- Table: users (EVM addresses for auth)
+CREATE TABLE IF NOT EXISTS users (
+  address TEXT PRIMARY KEY, -- EVM address (checksum)
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table: nonces (for auth challenges)
+CREATE TABLE IF NOT EXISTS nonces (
+  address TEXT PRIMARY KEY,
+  nonce TEXT NOT NULL,
+  issued_at TEXT DEFAULT CURRENT_TIMESTAMP
+);

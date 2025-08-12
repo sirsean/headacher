@@ -34,3 +34,16 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
 
+-- Table: users (for Web3 auth)
+CREATE TABLE IF NOT EXISTS users (
+  address TEXT PRIMARY KEY, -- EVM address (checksum)
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table: nonces (for SIWE auth)
+CREATE TABLE IF NOT EXISTS nonces (
+  address TEXT PRIMARY KEY,
+  nonce TEXT NOT NULL,
+  issued_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
