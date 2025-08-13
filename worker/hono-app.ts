@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { serveStatic } from 'hono/cloudflare-workers';
 import { validateTimestamp, isInt, toISO, dbAll, dbFirst, dbRun, mapHeadache, mapEvent, HttpError, corsHeaders, requireAuthentication } from "./utils";
 import type { EventItem, Headache } from "../src/types";
 import { generateNonce, SiweMessage } from "siwe";
@@ -34,18 +33,6 @@ async function readJson<T = Record<string, unknown>>(request: Request): Promise<
 
 // Note: requireAuth function is now imported from utils.ts and works with Hono Context
 
-// Custom middleware to add immutable cache-control headers for static assets
-const immutableCacheMiddleware = async (c: any, next: () => Promise<void>) => {
-  await next();
-  
-  // Only apply to successful responses
-  if (c.res.status === 200) {
-    const immutableTypes = /\.(js|css|png|svg|jpg|woff2?)$/i;
-    if (immutableTypes.test(new URL(c.req.url).pathname)) {
-      c.res.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-    }
-  }
-};
 
 // Create the Hono app with proper type definition for Variables
 type HonoEnv = {
