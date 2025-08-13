@@ -9,8 +9,8 @@ function NavigationBar() {
   return (
     <nav className="w-full border-b border-[--color-border] mb-4">
       <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6 flex items-center justify-between">
-        <NavLink to="/" className="text-lg sm:text-xl font-display text-[--color-neon-cyan] hover:opacity-80 transition-opacity" style={{textShadow: '0 0 10px var(--color-neon-cyan)'}}>
-          <h1>Headacher</h1>
+        <NavLink to="/" className="hover:opacity-80 transition-opacity p-0 m-0">
+          <img src="/android-chrome-512x512.png" alt="Headacher" className="h-12 w-12 p-0 m-0" />
         </NavLink>
         <div className="flex items-center gap-4">
           {/* Navigation links - hidden on mobile, shown on sm and up */}

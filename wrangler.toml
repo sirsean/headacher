@@ -18,3 +18,6 @@ preview_database_id = "headacher"
 [vars]
 JWT_SECRET = "your-development-jwt-secret-key-here-replace-with-proper-secret"
 
+[[routes]]
+pattern = "headacher.sirsean.me"
+custom_domain = true
