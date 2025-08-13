@@ -18,11 +18,7 @@ function isTokenValid(token: string): boolean {
 }
 
 // Get project ID from environment
-const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
-
-if (!import.meta.env.VITE_WALLETCONNECT_PROJECT_ID) {
-  console.warn('VITE_WALLETCONNECT_PROJECT_ID is not set. Please set it in your .env file for proper WalletConnect functionality.')
-}
+const projectId = '3ad651703bdec3b682ddb69769af9fff'
 
 // Set up the Wagmi adapter
 const wagmiAdapter = new WagmiAdapter({
