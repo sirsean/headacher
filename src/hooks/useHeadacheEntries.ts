@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { listHeadaches, listEvents, type ListHeadachesParams, type ListEventsParams } from '../api'
 import { useAuth } from './useAuth'
 import type { EventItem, Headache } from '../types'
@@ -17,6 +17,10 @@ export function useHeadacheEntries(options: UseHeadacheEntriesOptions = {}) {
     eventsParams    = DEFAULT_EVENTS_PARAMS,
   } = options;
 
+  // Memoize parameters to avoid unnecessary re-renders
+  const memoizedHeadachesParams = useMemo(() => headachesParams, [JSON.stringify(headachesParams)])
+  const memoizedEventsParams = useMemo(() => eventsParams, [JSON.stringify(eventsParams)])
+
   const [headaches, setHeadaches] = useState<Headache[]>([])
   const [events, setEvents] = useState<EventItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -28,8 +32,8 @@ export function useHeadacheEntries(options: UseHeadacheEntriesOptions = {}) {
     setError(null)
     try {
       const [h, e] = await Promise.all([
-        listHeadaches(headachesParams, fetchWithAuth),
-        listEvents(eventsParams, fetchWithAuth),
+        listHeadaches(memoizedHeadachesParams, fetchWithAuth),
+        listEvents(memoizedEventsParams, fetchWithAuth),
       ])
       setHeadaches(h.items)
       setEvents(e.items)
@@ -38,7 +42,7 @@ export function useHeadacheEntries(options: UseHeadacheEntriesOptions = {}) {
     } finally {
       setLoading(false)
     }
-  }, [headachesParams, eventsParams, fetchWithAuth])
+  }, [memoizedHeadachesParams, memoizedEventsParams, fetchWithAuth])
 
   useEffect(() => {
     // Fetch only when the page that uses this hook mounts

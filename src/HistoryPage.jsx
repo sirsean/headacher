@@ -30,6 +30,28 @@ function formatLocal(ts) {
 export default function HistoryPage() {
   const { address } = useAuth()
   
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
+  const [showDeleteHeadaches, setShowDeleteHeadaches] = useState(false)
+  const [showDeleteEvents, setShowDeleteEvents] = useState(false)
+
+  const [params, setParams] = useSearchParams();
+  const dateParam = params.get('date') ?? '';
+  const [selectedDate, setSelectedDate] = useState(dateParam);
+
+  const dateRange = useMemo(() => 
+    selectedDate ? dayToUtcRange(selectedDate) : {}, 
+    [selectedDate]
+  );
+
+  const headachesParams = useMemo(() => ({ ...dateRange, limit: 50 }), [dateRange]);
+  const eventsParams = useMemo(() => ({ ...dateRange, limit: 50 }), [dateRange]);
+
+  const { headaches, events, loading, error, setHeadaches, setEvents, setError } = useHeadacheEntries({
+    headachesParams,
+    eventsParams
+  })
+  const { removeHeadache, removeEvent } = useMutations()
+  
   // Show login required state when not authenticated
   if (!address) {
     return (
@@ -74,24 +96,6 @@ export default function HistoryPage() {
       </div>
     )
   }
-
-  const [showDeleteHeadaches, setShowDeleteHeadaches] = useState(false)
-  const [showDeleteEvents, setShowDeleteEvents] = useState(false)
-
-  const [params, setParams] = useSearchParams();
-  const dateParam = params.get('date') ?? '';
-  const [selectedDate, setSelectedDate] = useState(dateParam);
-
-  const dateRange = selectedDate ? dayToUtcRange(selectedDate) : {};
-
-  const headachesParams = useMemo(() => ({ ...dateRange, limit: 50 }), [selectedDate]);
-  const eventsParams = useMemo(() => ({ ...dateRange, limit: 50 }), [selectedDate]);
-
-  const { headaches, events, loading, error, setHeadaches, setEvents, setError } = useHeadacheEntries({
-    headachesParams,
-    eventsParams
-  })
-  const { removeHeadache, removeEvent } = useMutations()
 
   return (
     <div className="space-y-6">
