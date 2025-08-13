@@ -188,9 +188,9 @@ export async function dbRun(
 // JWT Secret Key cache
 let jwtSecretKey: CryptoKey | null = null;
 
-async function getJwtSecretKey(env: Env): Promise<CryptoKey> {
+export async function getJwtSecretKey(env: Env): Promise<CryptoKey> {
   if (!jwtSecretKey) {
-    const secretBytes = new TextEncoder().encode(env.JWT_SECRET);
+    const secretBytes = new TextEncoder().encode(env.JWT_SECRET_KEY);
     jwtSecretKey = await crypto.subtle.importKey(
       'raw',
       secretBytes,

@@ -1,26 +1,10 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { validateTimestamp, isInt, toISO, dbAll, dbFirst, dbRun, mapHeadache, mapEvent, HttpError, corsHeaders, requireAuthentication } from "./utils";
+import { validateTimestamp, isInt, toISO, dbAll, dbFirst, dbRun, mapHeadache, mapEvent, HttpError, corsHeaders, requireAuthentication, getJwtSecretKey } from "./utils";
 import type { EventItem, Headache } from "../src/types";
 import { generateNonce, SiweMessage } from "siwe";
 import { SignJWT } from "jose";
 
-// Convert JWT_SECRET string to CryptoKey for use with jose
-let jwtSecretKey: CryptoKey | null = null;
-
-async function getJwtSecretKey(env: Env): Promise<CryptoKey> {
-  if (!jwtSecretKey) {
-    const secretBytes = new TextEncoder().encode(env.JWT_SECRET);
-    jwtSecretKey = await crypto.subtle.importKey(
-      'raw',
-      secretBytes,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign', 'verify']
-    );
-  }
-  return jwtSecretKey;
-}
 
 // Helper function to read JSON from request
 async function readJson<T = Record<string, unknown>>(request: Request): Promise<T | null> {
