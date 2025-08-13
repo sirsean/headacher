@@ -9,8 +9,8 @@ directory = "./dist/client"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "headacher"
-database_id = "<production-db-id>"
+database_name = "headacher-production"
+database_id = "c0e1170f-a16c-4d93-abbe-e0e4192042ae"
 preview_database_id = "headacher"
 
 # JWT Secret Key (generate with: wrangler secret put JWT_SECRET_KEY)
