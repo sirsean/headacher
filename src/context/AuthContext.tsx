@@ -4,6 +4,7 @@ import { mainnet, sepolia } from '@wagmi/core/chains'
 import { injected, walletConnect } from '@wagmi/connectors'
 import { SiweMessage } from 'siwe'
 import { AuthContext } from './AuthContext'
+import { isMobile } from '../utils/isMobile'
 
 // Simple JWT token validation (check if expired)
 function isTokenValid(token: string): boolean {
@@ -19,19 +20,23 @@ function isTokenValid(token: string): boolean {
 // Configure wagmi with WalletConnect for mobile support
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
 
+// Create connector instances to reuse across config and connect calls
+const injectedConnector = injected()
+const walletConnectConnector = walletConnect({
+  projectId,
+  metadata: {
+    name: 'Headacher',
+    description: 'Headache tracking application',
+    url: window.location.origin,
+    icons: [`${window.location.origin}/favicon.ico`]
+  }
+})
+
 const config = createConfig({
   chains: [mainnet, sepolia],
   connectors: [
-    injected(),
-    walletConnect({
-      projectId,
-      metadata: {
-        name: 'Headacher',
-        description: 'Headache tracking application',
-        url: window.location.origin,
-        icons: [`${window.location.origin}/favicon.ico`]
-      }
-    })
+    injectedConnector,
+    walletConnectConnector
   ],
   transports: {
     [mainnet.id]: http(),
@@ -100,8 +105,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true)
 
-      // Try to connect with injected wallet first
-      const result = await wagmiConnect(config, { connector: injected() })
+      // Choose connector based on device type
+      const preferredConnector = isMobile ? walletConnectConnector : injectedConnector
+
+      let result
+      try {
+        result = await wagmiConnect(config, { connector: preferredConnector })
+      } catch {
+        // graceful fallback: try the other connector
+        const fallback = isMobile ? injectedConnector : walletConnectConnector
+        result = await wagmiConnect(config, { connector: fallback })
+      }
       
       if (!result.accounts[0]) {
         throw new Error('No account connected')
@@ -174,6 +188,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const disconnect = useCallback(async () => {
     try {
       setLoading(true)
+      // wagmiDisconnect automatically disconnects any active connector,
+      // including WalletConnect sessions - no additional cleanup needed
       await wagmiDisconnect(config)
       setAddress(null)
       localStorage.removeItem('auth_token')
