@@ -1,4 +1,6 @@
 import type { EventItem, Headache } from "../src/types";
+import type { Context } from "hono";
+import { jwtVerify } from "jose";
 
 export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -182,4 +184,51 @@ export async function dbRun(
 ): Promise<D1Result> {
   return db.prepare(sql).bind(...binds).run();
 }
+
+// JWT Secret Key cache
+let jwtSecretKey: CryptoKey | null = null;
+
+async function getJwtSecretKey(env: Env): Promise<CryptoKey> {
+  if (!jwtSecretKey) {
+    const secretBytes = new TextEncoder().encode(env.JWT_SECRET);
+    jwtSecretKey = await crypto.subtle.importKey(
+      'raw',
+      secretBytes,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify']
+    );
+  }
+  return jwtSecretKey;
+}
+
+// Helper function to require authentication - works with Hono Context
+// Sets 'addr' in context for downstream handlers to retrieve with c.get('addr')
+export async function requireAuth<T extends { Bindings: Env; Variables: { addr: string } }>(c: Context<T>): Promise<void> {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw new HttpError(401, "Missing or invalid authorization header");
+  }
+
+  const token = authHeader.slice(7); // Remove "Bearer " prefix
+  try {
+    const secretKey = await getJwtSecretKey(c.env);
+    const { payload } = await jwtVerify(token, secretKey);
+    const address = payload.sub;
+    if (!address) {
+      throw new HttpError(401, "Invalid token: missing subject");
+    }
+    // Set the authenticated address in context for downstream handlers
+    c.set('addr', address);
+  } catch {
+    throw new HttpError(401, "Invalid or expired token");
+  }
+}
+
+// Middleware function for Hono that handles authentication
+// Usage: app.use('/protected/*', requireAuthentication);
+export const requireAuthentication = async (c: Context<{ Bindings: Env; Variables: { addr: string } }>, next: () => Promise<void>) => {
+  await requireAuth(c); // sets 'addr' in context, throws HttpError 401 on failure
+  await next();
+};
 

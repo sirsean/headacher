@@ -27,6 +27,7 @@
 		"@walletconnect/modal": "^2.7.0",
 		"buffer": "^6.0.3",
 		"ethers": "6.15.0",
+		"hono": "^4.0.0",
 		"jose": "6.0.12",
 		"react": "^19.1.0",
 		"react-dom": "^19.1.0",
