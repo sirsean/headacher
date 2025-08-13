@@ -1,10 +1,10 @@
 import { useMemo, useState, useCallback, useEffect, type ReactNode } from 'react'
-import { createConfig, http, connect as wagmiConnect, disconnect as wagmiDisconnect, signMessage, getAccount, watchAccount } from '@wagmi/core'
-import { mainnet, sepolia } from '@wagmi/core/chains'
-import { injected, walletConnect } from '@wagmi/connectors'
+import { createAppKit } from '@reown/appkit/react'
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
+import { mainnet, sepolia } from 'viem/chains'
+import { signMessage, getAccount, disconnect as wagmiDisconnect, getChainId, watchAccount } from '@wagmi/core'
 import { SiweMessage } from 'siwe'
 import { AuthContext } from './AuthContext'
-import { isMobile } from '../utils/isMobile'
 
 // Simple JWT token validation (check if expired)
 function isTokenValid(token: string): boolean {
@@ -17,112 +17,46 @@ function isTokenValid(token: string): boolean {
   }
 }
 
-// Configure wagmi with WalletConnect for mobile support
+// Get project ID from environment
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
 
-// Create connector instances to reuse across config and connect calls
-const injectedConnector = injected()
-const walletConnectConnector = walletConnect({
+if (!import.meta.env.VITE_WALLETCONNECT_PROJECT_ID) {
+  console.warn('VITE_WALLETCONNECT_PROJECT_ID is not set. Please set it in your .env file for proper WalletConnect functionality.')
+}
+
+// Set up the Wagmi adapter
+const wagmiAdapter = new WagmiAdapter({
+  networks: [mainnet, sepolia],
+  projectId,
+})
+
+// Create the AppKit instance
+const modal = createAppKit({
+  adapters: [wagmiAdapter],
+  networks: [mainnet, sepolia],
   projectId,
   metadata: {
     name: 'Headacher',
     description: 'Headache tracking application',
     url: window.location.origin,
     icons: [`${window.location.origin}/favicon.ico`]
+  },
+  features: {
+    analytics: true // Optional: enable analytics
   }
 })
 
-const config = createConfig({
-  chains: [mainnet, sepolia],
-  connectors: [
-    injectedConnector,
-    walletConnectConnector
-  ],
-  transports: {
-    [mainnet.id]: http(),
-    [sepolia.id]: http(),
-  },
-})
+// Get the wagmi config from the adapter
+const config = wagmiAdapter.wagmiConfig
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Check for existing auth on mount and watch for account changes
-  useEffect(() => {
-    const token = localStorage.getItem('auth_token')
-    
-    // Function to sync auth state with current account
-    const syncAuthState = (account: { address?: `0x${string}` } | undefined) => {
-      if (account?.address && token && isTokenValid(token)) {
-        // We have both a connected wallet and a valid token
-        setAddress(account.address)
-      } else if (token && !isTokenValid(token)) {
-        // If we have an invalid/expired token, clear it
-        localStorage.removeItem('auth_token')
-        setAddress(null)
-      } else if (!token) {
-        // No token, make sure address is cleared
-        setAddress(null)
-      }
-      // NOTE: If we have a valid token but no account.address yet,
-      // we wait for the wallet to initialize via the account watcher
-    }
-
-    // Initial check
-    const initialAccount = getAccount(config)
-    syncAuthState(initialAccount)
-
-    // Watch for account changes (connects, disconnects, switches)
-    const unwatchAccount = watchAccount(config, {
-      onChange: (account) => {
-        const currentToken = localStorage.getItem('auth_token')
-        
-        if (account.address && currentToken && isTokenValid(currentToken)) {
-          // Account connected and we have a valid token
-          setAddress(account.address)
-        } else if (account.address && currentToken && !isTokenValid(currentToken)) {
-          // Account connected but token is expired/invalid
-          localStorage.removeItem('auth_token')
-          setAddress(null)
-        } else if (!account.address && address) {
-          // Account was disconnected (we had an address before, now we don't)
-          if (currentToken) {
-            localStorage.removeItem('auth_token')
-          }
-          setAddress(null)
-        }
-        // NOTE: We don't delete tokens just because account.address is undefined
-        // during initialization - only when there's an explicit disconnect
-      }
-    })
-
-    // Cleanup watcher on unmount
-    return unwatchAccount
-  }, [])
-
-  const connect = useCallback(async () => {
+  // Handle SIWE authentication when wallet connects
+  const authenticateWithSiwe = useCallback(async (userAddress: string, chainId: number) => {
     try {
       setLoading(true)
-
-      // Choose connector based on device type
-      const preferredConnector = isMobile ? walletConnectConnector : injectedConnector
-
-      let result
-      try {
-        result = await wagmiConnect(config, { connector: preferredConnector })
-      } catch {
-        // graceful fallback: try the other connector
-        const fallback = isMobile ? injectedConnector : walletConnectConnector
-        result = await wagmiConnect(config, { connector: fallback })
-      }
-      
-      if (!result.accounts[0]) {
-        throw new Error('No account connected')
-      }
-
-      const userAddress = result.accounts[0]
-      setAddress(userAddress)
 
       // Get nonce from server
       const nonceResponse = await fetch(`/api/auth/nonce?address=${encodeURIComponent(userAddress)}`, {
@@ -142,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         statement: `Sign in with Ethereum.`,
         uri: window.location.origin,
         version: '1',
-        chainId: result.chainId,
+        chainId,
         nonce,
       })
 
@@ -171,19 +105,152 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Store JWT in localStorage
       localStorage.setItem('auth_token', token)
       
-      // Ensure address is still set after successful auth
+      // Set the authenticated address
       setAddress(userAddress)
-
+      
+      return true
     } catch (error) {
-      console.error('Connection failed:', error)
+      console.error('SIWE authentication failed:', error)
+      // Don't disconnect on SIWE failure, just clear our auth state
       setAddress(null)
-      // Disconnect on error
-      await wagmiDisconnect(config)
+      localStorage.removeItem('auth_token')
       throw error
     } finally {
       setLoading(false)
     }
   }, [])
+
+  // Handle account changes and trigger auth if needed
+  const handleAccountChange = useCallback(async (account: { address?: `0x${string}`, isConnected: boolean }) => {
+    if (!account.isConnected || !account.address) {
+      setAddress(null)
+      return
+    }
+
+    const token = localStorage.getItem('auth_token')
+    
+    if (token && isTokenValid(token)) {
+      setAddress(account.address)
+    } else {
+      try {
+        const chainId = getChainId(config)
+        await authenticateWithSiwe(account.address, chainId)
+      } catch (error) {
+        console.error('Authentication failed on account change:', error)
+        setAddress(null)
+      }
+    }
+  }, [authenticateWithSiwe])
+
+  // Initialize auth state on mount and handle session restoration
+  useEffect(() => {
+    let mounted = true
+    
+    const initializeAuth = async () => {
+      // Wait a bit for wallet connection state to be restored by AppKit/Wagmi
+      // This is necessary because the wallet connection isn't immediately available on page load
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      if (!mounted) return
+      
+      const account = getAccount(config)
+      const token = localStorage.getItem('auth_token')
+      
+      if (account?.address && token && isTokenValid(token)) {
+        // We have both a connected account and valid token - restore session
+        setAddress(account.address)
+      } else if (token && !isTokenValid(token)) {
+        // Clear expired token
+        localStorage.removeItem('auth_token')
+        setAddress(null)
+      } else if (account?.address && (!token || !isTokenValid(token))) {
+        // Account is connected but no valid auth - trigger authentication
+        try {
+          const chainId = getChainId(config)
+          await authenticateWithSiwe(account.address, chainId)
+        } catch (error) {
+          console.error('Initial authentication failed:', error)
+          // Don't disconnect, just clear our auth state
+          setAddress(null)
+        }
+      } else {
+        setAddress(null)
+        
+        // If we have a valid token but no account detected yet, 
+        // set up a retry mechanism to check again
+        if (token && isTokenValid(token)) {
+          const retryCount = 5
+          const retryDelay = 500
+          
+          for (let i = 0; i < retryCount; i++) {
+            if (!mounted) return
+            
+            await new Promise(resolve => setTimeout(resolve, retryDelay))
+            const retryAccount = getAccount(config)
+            
+            if (retryAccount?.address) {
+              setAddress(retryAccount.address)
+              return
+            }
+          }
+        }
+      }
+    }
+    
+    initializeAuth()
+    
+    return () => {
+      mounted = false
+    }
+  }, [])
+  
+  // Set up account watcher for real-time updates
+  useEffect(() => {
+    const unwatch = watchAccount(config, {
+      onChange: handleAccountChange,
+    })
+    
+    return unwatch
+  }, [handleAccountChange])
+
+  const connect = useCallback(async () => {
+    try {
+      setLoading(true)
+      
+      // Check current account state first
+      const currentAccount = getAccount(config)
+      const currentToken = localStorage.getItem('auth_token')
+      
+      // If already connected with valid auth, don't need to do anything
+      if (currentAccount?.address && currentToken && isTokenValid(currentToken)) {
+        setAddress(currentAccount.address)
+        return
+      }
+      
+      // If account is connected but no valid token, authenticate directly
+      if (currentAccount?.address && (!currentToken || !isTokenValid(currentToken))) {
+        try {
+          const chainId = getChainId(config)
+          await authenticateWithSiwe(currentAccount.address, chainId)
+          return
+        } catch (error) {
+          console.error('Direct authentication failed, opening modal:', error)
+          // Fall through to modal opening
+        }
+      }
+
+      // Open the AppKit modal for wallet connection
+      modal.open()
+      
+    } catch (error) {
+      console.error('Connection failed:', error)
+      setAddress(null)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [authenticateWithSiwe])
+
 
   const disconnect = useCallback(async () => {
     try {
@@ -192,7 +259,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // including WalletConnect sessions - no additional cleanup needed
       await wagmiDisconnect(config)
       setAddress(null)
-      localStorage.removeItem('auth_token')
+      
+      // Clear all localStorage to ensure clean state on next login
+      localStorage.clear()
     } catch (error) {
       console.error('Disconnect failed:', error)
       throw error
