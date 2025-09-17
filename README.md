@@ -59,11 +59,11 @@ export JWT_SECRET_KEY="YOUR_GENERATED_SECRET_HERE"
 
 - npx wrangler d1 migrations apply headacher --local
 
-2) Run the Worker locally against the local D1 database:
+2) Run the unified dev server (SPA + Worker API via Cloudflare Vite plugin):
 
-- npx wrangler dev --local
+- npm run dev
 
-By default the API will be available at http://127.0.0.1:8787.
+By default the app and API will be available at http://127.0.0.1:5173 (API under /api/*).
 
 ## API Overview
 - GET /api/health
@@ -85,7 +85,7 @@ Notes
 - Content-Type: application/json for request bodies
 
 ## Example cURL calls
-Replace BASE with http://127.0.0.1:8787.
+Replace BASE with http://127.0.0.1:5173.
 
 Headaches
 
@@ -130,7 +130,7 @@ Events
 ## Quick CORS check (in browser console)
 Paste into the browser devtools console. You should see JSON output and no CORS errors.
 
-- const BASE = 'http://127.0.0.1:8787';
+- const BASE = 'http://127.0.0.1:5173';
 - fetch(`${BASE}/api/headaches`, { headers: { 'content-type': 'application/json' } })
   .then(r => r.json())
   .then(console.log)
