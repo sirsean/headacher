@@ -19,6 +19,7 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "@lit/reactive-element": "2.1.1",
     "@reown/appkit": "^1.7.19",
     "@reown/appkit-adapter-wagmi": "^1.7.19",
     "@tailwindcss/vite": "^4.1.11",
@@ -30,6 +31,9 @@
     "firebase": "^12.2.1",
     "hono": "^4.9.7",
     "jose": "6.0.12",
+    "lit": "3.3.0",
+    "lit-element": "4.2.1",
+    "lit-html": "3.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^6.30.1",
