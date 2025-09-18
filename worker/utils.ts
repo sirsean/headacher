@@ -204,7 +204,7 @@ export async function getJwtSecretKey(env: Env): Promise<CryptoKey> {
 
 // Helper function to require authentication - works with Hono Context
 // Sets 'addr' in context for downstream handlers to retrieve with c.get('addr')
-export async function requireAuth<T extends { Bindings: Env; Variables: { addr: string } }>(c: Context<T>): Promise<void> {
+export async function requireAuth<T extends { Bindings: Env; Variables: { addr: string; userId: string } }>(c: Context<T>): Promise<void> {
   const authHeader = c.req.header("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     throw new HttpError(401, "Missing or invalid authorization header");
@@ -214,12 +214,14 @@ export async function requireAuth<T extends { Bindings: Env; Variables: { addr: 
   try {
     const secretKey = await getJwtSecretKey(c.env);
     const { payload } = await jwtVerify(token, secretKey);
-    const address = payload.sub;
-    if (!address) {
+    const userId = payload.sub as string | undefined;
+    if (!userId) {
       throw new HttpError(401, "Invalid token: missing subject");
     }
-    // Set the authenticated address in context for downstream handlers
-    c.set('addr', address);
+    // Back-compat: allow optional addr claim for legacy flows
+    const addr = (payload as any).siwe_address as string | undefined;
+    c.set('userId', userId);
+    if (addr) c.set('addr', addr);
   } catch {
     throw new HttpError(401, "Invalid or expired token");
   }
@@ -227,8 +229,11 @@ export async function requireAuth<T extends { Bindings: Env; Variables: { addr: 
 
 // Middleware function for Hono that handles authentication
 // Usage: app.use('/protected/*', requireAuthentication);
-export const requireAuthentication = async (c: Context<{ Bindings: Env; Variables: { addr: string } }>, next: () => Promise<void>) => {
-  await requireAuth(c); // sets 'addr' in context, throws HttpError 401 on failure
+export const requireAuthentication = async (
+  c: Context<{ Bindings: Env; Variables: { addr: string; userId: string } }>,
+  next: () => Promise<void>
+) => {
+  await requireAuth(c); // sets 'userId' (and optionally 'addr') in context, throws HttpError 401 on failure
   await next();
 };
 

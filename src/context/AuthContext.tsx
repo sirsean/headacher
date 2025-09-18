@@ -47,6 +47,7 @@ const config = wagmiAdapter.wagmiConfig
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [loading, setLoading] = useState(false)
 
   // Handle SIWE authentication when wallet connects
@@ -101,7 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Store JWT in localStorage
       localStorage.setItem('auth_token', token)
       
-      // Set the authenticated address
+      // Set authenticated state
+      setIsAuthenticated(true)
       setAddress(userAddress)
       
       return true
@@ -126,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('auth_token')
     
     if (token && isTokenValid(token)) {
+      setIsAuthenticated(true)
       setAddress(account.address)
     } else {
       try {
@@ -154,10 +157,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (account?.address && token && isTokenValid(token)) {
         // We have both a connected account and valid token - restore session
+        setIsAuthenticated(true)
         setAddress(account.address)
       } else if (token && !isTokenValid(token)) {
         // Clear expired token
         localStorage.removeItem('auth_token')
+        setIsAuthenticated(false)
         setAddress(null)
       } else if (account?.address && (!token || !isTokenValid(token))) {
         // Account is connected but no valid auth - trigger authentication
@@ -185,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const retryAccount = getAccount(config)
             
             if (retryAccount?.address) {
+              setIsAuthenticated(true)
               setAddress(retryAccount.address)
               return
             }
@@ -258,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Clear all localStorage to ensure clean state on next login
       localStorage.clear()
+      setIsAuthenticated(false)
     } catch (error) {
       console.error('Disconnect failed:', error)
       throw error
@@ -282,6 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Handle 401 responses by auto-logout
     if (response.status === 401) {
       localStorage.removeItem('auth_token')
+      setIsAuthenticated(false)
       setAddress(null)
       // Only redirect if we're not already on the home page
       if (window.location.pathname !== '/') {
@@ -292,13 +300,145 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response
   }, [])
 
+  // Google login via Firebase -> exchange for app JWT
+  const loginWithGoogle = useCallback(async () => {
+    try {
+      setLoading(true)
+      const isNarrow = window.matchMedia('(max-width: 640px)').matches
+      const { signInWithGooglePopup, signInWithGoogleRedirect, getFirebaseAuth } = await import('../config/firebase')
+      let idToken: string | null = null
+
+      if (isNarrow) {
+        // For redirect flow, we need to handle the result after redirect.
+        // Here, prefer popup for simplicity; if blocked, fallback to redirect.
+        try {
+          const r = await signInWithGooglePopup()
+          idToken = r.idToken
+        } catch (e) {
+          await signInWithGoogleRedirect()
+          // After redirect back, Firebase will have a currentUser; get token then
+          const auth = getFirebaseAuth()
+          if (auth.currentUser) idToken = await auth.currentUser.getIdToken(true)
+        }
+      } else {
+        const r = await signInWithGooglePopup()
+        idToken = r.idToken
+      }
+
+      if (!idToken) throw new Error('Failed to obtain Google ID token')
+
+      const resp = await fetch('/api/auth/google/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      })
+      if (!resp.ok) throw new Error('Google verify failed')
+      const { token } = await resp.json()
+      localStorage.setItem('auth_token', token)
+
+      // Mark authenticated; wallet may or may not be connected
+      setIsAuthenticated(true)
+      setAddress(getAccount(config)?.address ?? null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Link Google to current logged-in account (does not change current JWT)
+  const linkWithGoogle = useCallback(async () => {
+    try {
+      setLoading(true)
+      const { signInWithGooglePopup } = await import('../config/firebase')
+      const r = await signInWithGooglePopup()
+      const idToken = r.idToken
+      const resp = await fetch('/api/auth/link/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(localStorage.getItem('auth_token') ? { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } : {}) },
+        body: JSON.stringify({ idToken }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err?.error?.message || 'Failed to link Google account')
+      }
+      return true
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Link SIWE to current logged-in account (does not change current JWT)
+  const linkWithSiwe = useCallback(async () => {
+    try {
+      setLoading(true)
+      const account = getAccount(config)
+      if (!account?.address) throw new Error('Connect your wallet first in order to link it')
+      const userAddress = account.address
+      const chainId = getChainId(config)
+
+      // Get nonce
+      const nonceRes = await fetch(`/api/auth/nonce?address=${encodeURIComponent(userAddress)}`)
+      if (!nonceRes.ok) throw new Error('Failed to get nonce')
+      const { nonce } = await nonceRes.json()
+
+      // Build SIWE message
+      const siweMessage = new SiweMessage({
+        domain: window.location.host,
+        address: userAddress,
+        statement: 'Link wallet to your Headacher account.',
+        uri: window.location.origin,
+        version: '1',
+        chainId,
+        nonce,
+      })
+      const message = siweMessage.prepareMessage()
+      const signature = await signMessage(config, { message })
+
+      // Call link endpoint with current JWT
+      const token = localStorage.getItem('auth_token')
+      const res = await fetch('/api/auth/link/siwe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ message, signature }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error?.message || 'Failed to link wallet')
+      }
+      return true
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Identities cache for nav/settings
+  const [identities, setIdentities] = useState<import('../types').Identity[] | null>(null)
+  const refreshIdentities = useCallback(async () => {
+    const res = await fetchWithAuth('/api/auth/identities')
+    const data = await res.json().catch(() => ({})) as { identities?: import('../types').Identity[] }
+    setIdentities(data.identities ?? [])
+  }, [fetchWithAuth])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshIdentities().catch(() => setIdentities([]))
+    } else {
+      setIdentities(null)
+    }
+  }, [isAuthenticated, refreshIdentities])
+
   const value = useMemo(() => ({
     connect,
     disconnect,
     address,
+    isAuthenticated,
     loading,
     fetchWithAuth,
-  }), [connect, disconnect, address, loading, fetchWithAuth])
+    loginWithGoogle,
+    linkWithGoogle,
+    linkWithSiwe,
+    identities,
+    refreshIdentities,
+  }), [connect, disconnect, address, isAuthenticated, loading, fetchWithAuth, loginWithGoogle, linkWithGoogle, linkWithSiwe, identities, refreshIdentities])
 
   return (
     <AuthContext.Provider value={value}>

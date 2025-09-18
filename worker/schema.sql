@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS headaches (
   severity INTEGER NOT NULL CHECK (severity BETWEEN 0 AND 10),
   aura INTEGER NOT NULL CHECK (aura IN (0,1)),
   user_id TEXT NOT NULL,
-  FOREIGN KEY(user_id) REFERENCES users(address) ON DELETE CASCADE
+  FOREIGN KEY(user_id) REFERENCES users_v2(id) ON DELETE CASCADE
 );
 
 -- Indexes for headaches
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS events (
   event_type TEXT NOT NULL, -- free-form text
   value TEXT NOT NULL, -- free-form text
   user_id TEXT NOT NULL,
-  FOREIGN KEY(user_id) REFERENCES users(address) ON DELETE CASCADE
+  FOREIGN KEY(user_id) REFERENCES users_v2(id) ON DELETE CASCADE
 );
 
 -- Indexes for events
@@ -44,11 +44,34 @@ CREATE TABLE IF NOT EXISTS settings (
 -- Index to accelerate lookups by key (redundant with UNIQUE but explicit for clarity)
 CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
 
--- Table: users (EVM addresses for auth)
+-- Legacy users table retained for reference in migration contexts
 CREATE TABLE IF NOT EXISTS users (
   address TEXT PRIMARY KEY, -- EVM address (checksum)
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Canonical users table for multi-identity
+CREATE TABLE IF NOT EXISTS users_v2 (
+  id TEXT PRIMARY KEY,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  display_name TEXT,
+  email TEXT
+);
+
+-- Identity mappings
+CREATE TABLE IF NOT EXISTS identities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  provider TEXT NOT NULL, -- 'SIWE', 'GOOGLE', etc
+  identifier TEXT NOT NULL, -- address or firebase uid
+  email TEXT,
+  display_name TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(provider, identifier),
+  FOREIGN KEY(user_id) REFERENCES users_v2(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_identities_user_id ON identities(user_id);
+CREATE INDEX IF NOT EXISTS idx_identities_provider ON identities(provider);
 
 -- Table: nonces (for auth challenges)
 CREATE TABLE IF NOT EXISTS nonces (

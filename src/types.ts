@@ -87,3 +87,13 @@ export interface Page<T> {
   total?: number;
 }
 
+// Auth identities (for UI)
+export type IdentityProvider = 'SIWE' | 'GOOGLE';
+export interface Identity {
+  provider: IdentityProvider;
+  identifier: string;
+  email?: string | null;
+  display_name?: string | null;
+  created_at?: string | null;
+}
+

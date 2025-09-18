@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import { useHeadacheEntries } from "./hooks/useHeadacheEntries";
 import { useMutations } from "./hooks/useMutations";
-import WalletButton from "./components/WalletButton";
+import AuthButtons from "./components/AuthButtons";
 import DatePicker from "./components/DatePicker";
 import { dayToUtcRange } from "./utils/dateRange";
 
@@ -33,7 +33,7 @@ function getTodayAsYyyyMmDd() {
 }
 
 export default function HistoryPage() {
-  const { address } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const [showDeleteHeadaches, setShowDeleteHeadaches] = useState(false);
@@ -73,7 +73,7 @@ export default function HistoryPage() {
   const { removeHeadache, removeEvent } = useMutations();
 
   // Show login required state when not authenticated
-  if (!address) {
+  if (!isAuthenticated) {
     return (
       <div className="space-y-6">
         <div className="panel text-center">
@@ -88,7 +88,7 @@ export default function HistoryPage() {
               Your history shows all your tracked headaches and events, allowing
               you to review patterns and make data-driven health decisions.
             </p>
-            <WalletButton className="mx-auto" />
+            <div className="flex justify-center"><AuthButtons size="md" /></div>
           </div>
         </div>
 

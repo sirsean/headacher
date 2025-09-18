@@ -5,18 +5,11 @@ interface WalletButtonProps {
 }
 
 function WalletButton({ className = '' }: WalletButtonProps) {
-  const { connect, disconnect, address, loading } = useAuth()
+  const { connect, disconnect, isAuthenticated, loading } = useAuth()
 
-  const formatAddress = (addr: string) => {
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
-  }
-
-  if (address) {
+  if (isAuthenticated) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <span className="text-sm text-[--color-foreground-muted] hidden sm:inline">
-          {formatAddress(address)}
-        </span>
         <button
           onClick={() => disconnect()}
           disabled={loading}

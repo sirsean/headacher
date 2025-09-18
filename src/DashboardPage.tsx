@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import DashboardChart from './components/DashboardChart'
-import WalletButton from './components/WalletButton'
+import AuthButtons from './components/AuthButtons'
 import type { DashboardData } from './api'
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
-  const { address } = useAuth()
+  const { isAuthenticated } = useAuth()
 
   // Show login required state when not authenticated
-  if (!address) {
+  if (!isAuthenticated) {
     return (
       <div className="space-y-6">
         <div className="panel text-center">
@@ -21,7 +21,7 @@ export default function DashboardPage() {
             <p className="text-[--color-subtle]">
               Your dashboard displays personalized headache patterns and trends based on your tracked data.
             </p>
-            <WalletButton className="mx-auto" />
+            <div className="flex justify-center"><AuthButtons size="md" /></div>
           </div>
         </div>
         

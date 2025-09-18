@@ -15,8 +15,9 @@ preview_database_id = "headacher"
 
 # JWT Secret Key (generate with: wrangler secret put JWT_SECRET_KEY)
 # For production, use: wrangler secret put JWT_SECRET_KEY
-# [vars]
+[vars]
 # JWT_SECRET_KEY = "your-development-jwt-secret-key-here-replace-with-proper-secret"
+FIREBASE_PROJECT_ID = "headacher-c4d8d"
 
 [[routes]]
 pattern = "headacher.sirsean.me"

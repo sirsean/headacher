@@ -4,13 +4,13 @@ import { useAuth } from './hooks/useAuth'
 import DashboardChart from './components/DashboardChart'
 import HeadacheEntryForm from './components/HeadacheEntryForm'
 import EventEntryForm from './components/EventEntryForm'
-import WalletButton from './components/WalletButton'
+import AuthButtons from './components/AuthButtons'
 import type { DashboardData } from './api'
 
 export default function HomePage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const { address } = useAuth()
+  const { isAuthenticated } = useAuth()
 
   const handleEntrySuccess = () => {
     // Trigger a refresh of the dashboard data when a new entry is created
@@ -18,7 +18,7 @@ export default function HomePage() {
   }
 
   // Show login required state when not authenticated
-  if (!address) {
+  if (!isAuthenticated) {
     return (
       <div className="space-y-6">
         <div className="panel">
@@ -54,13 +54,15 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Connect Wallet Call to Action */}
+        {/* Sign-in options */}
         <div className="panel text-center">
           <h3 className="font-display text-lg mb-3 text-[--color-attention]">Get Started</h3>
           <p className="text-[--color-subtle] mb-4">
-            Connect your wallet to start tracking your headaches and events.
+            Choose a sign-in method to start tracking your headaches and events.
           </p>
-          <WalletButton className="mx-auto" />
+          <div className="flex gap-3 justify-center">
+            <AuthButtons size="md" />
+          </div>
         </div>
       </div>
     )

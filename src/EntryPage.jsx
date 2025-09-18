@@ -1,13 +1,13 @@
 import { useAuth } from './hooks/useAuth'
 import HeadacheEntryForm from './components/HeadacheEntryForm'
 import EventEntryForm from './components/EventEntryForm'
-import WalletButton from './components/WalletButton'
+import AuthButtons from './components/AuthButtons'
 
 export default function EntryPage() {
-  const { address } = useAuth()
+  const { isAuthenticated } = useAuth()
 
   // Show login required state when not authenticated
-  if (!address) {
+  if (!isAuthenticated) {
     return (
       <div className="space-y-6">
         <div className="panel text-center">
@@ -19,7 +19,7 @@ export default function EntryPage() {
             <p className="text-[--color-subtle]">
               Your data will be securely associated with your wallet address, ensuring privacy and data ownership.
             </p>
-            <WalletButton className="mx-auto" />
+            <div className="flex justify-center"><AuthButtons size="md" /></div>
           </div>
         </div>
         

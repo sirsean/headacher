@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { validateTimestamp, isInt, toISO, dbAll, dbFirst, dbRun, mapHeadache, mapEvent, HttpError, corsHeaders, requireAuthentication, getJwtSecretKey } from "./utils";
+import { upsertUserForSiwe, upsertUserForGoogle, linkSiweToUser, linkGoogleToUser, getUserIdentities } from "./services/identity-service";
+import { verifyFirebaseIdToken } from "./services/firebase-auth";
 import type { EventItem, Headache } from "../src/types";
 import { generateNonce, SiweMessage } from "siwe";
 import { SignJWT } from "jose";
@@ -23,6 +25,7 @@ type HonoEnv = {
   Bindings: Env;
   Variables: {
     addr: string;
+    userId: string;
   };
 };
 const app = new Hono<HonoEnv>();
@@ -136,12 +139,8 @@ app.post('/api/auth/verify', async (c) => {
       return c.json({ error: { status: 401, message: "Invalid signature", details: null } }, 401);
     }
 
-    // Insert address into users table if new
-    await dbRun(
-      c.env.DB,
-      "INSERT OR IGNORE INTO users (address) VALUES (?)",
-      [address]
-    );
+    // Ensure identity and get canonical userId
+    const userId = await upsertUserForSiwe(c.env.DB, address);
 
     // Delete the used nonce
     await dbRun(
@@ -150,18 +149,131 @@ app.post('/api/auth/verify', async (c) => {
       [address]
     );
 
-    // Issue JWT token
+    // Issue long-lived JWT token (1 year), subject = userId
     const secretKey = await getJwtSecretKey(c.env);
-    const jwt = await new SignJWT({ sub: address })
+    const jwt = await new SignJWT({ sub: userId, siwe_address: address, auth_provider: 'SIWE' })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime('7d')
+      .setExpirationTime('365d')
       .sign(secretKey);
 
     return c.json({ token: jwt });
   } catch (err) {
     console.error("SIWE verification error:", err);
     return c.json({ error: { status: 401, message: "Authentication failed", details: null } }, 401);
+  }
+});
+
+// Auth: Google verify (Firebase)
+app.post('/api/auth/google/verify', async (c) => {
+  try {
+    const body = await readJson<{ idToken: string; projectId?: string }>(c.req.raw);
+    if (!body || !body.idToken) {
+      return c.json({ error: { status: 400, message: "Missing idToken", details: null } }, 400);
+    }
+    const projectId = body.projectId || (c.env as any).FIREBASE_PROJECT_ID;
+    if (!projectId) {
+      return c.json({ error: { status: 500, message: "Server missing FIREBASE_PROJECT_ID", details: null } }, 500);
+    }
+
+    const info = await verifyFirebaseIdToken(body.idToken, projectId);
+    const userId = await upsertUserForGoogle(c.env.DB, info.uid, info.email, info.name);
+
+    const secretKey = await getJwtSecretKey(c.env);
+    const jwt = await new SignJWT({ sub: userId, firebase_uid: info.uid, email: info.email, auth_provider: 'GOOGLE' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime('365d')
+      .sign(secretKey);
+
+    return c.json({ token: jwt });
+  } catch (err) {
+    console.error('Google verify error', err);
+    return c.json({ error: { status: 401, message: 'Google authentication failed', details: null } }, 401);
+  }
+});
+
+// Auth: Identities for current user
+app.get('/api/auth/identities', requireAuthentication, async (c) => {
+  const userId = c.get('userId');
+  const list = await getUserIdentities(c.env.DB, userId);
+  return c.json({ identities: list });
+});
+
+// Auth: Link SIWE to current user
+app.post('/api/auth/link/siwe', requireAuthentication, async (c) => {
+  const userId = c.get('userId');
+  const body = await readJson<{ message: string; signature: string }>(c.req.raw);
+  if (!body || !body.message || !body.signature) {
+    return c.json({ error: { status: 400, message: "Missing message or signature", details: null } }, 400);
+  }
+
+  // Verify SIWE again to prove wallet control
+  try {
+    const siweMessage = new SiweMessage(body.message);
+    const address = siweMessage.address;
+
+    // Fetch stored nonce for this address
+    const storedNonce = await dbFirst<{ nonce: string; issued_at: string }>(
+      c.env.DB,
+      "SELECT nonce, issued_at FROM nonces WHERE address = ? ORDER BY issued_at DESC",
+      [address],
+      (row) => ({ nonce: row.nonce || '', issued_at: row.issued_at || '' })
+    );
+
+    if (!storedNonce) {
+      return c.json({ error: { status: 401, message: "No nonce found for this address", details: null } }, 401);
+    }
+
+    if (siweMessage.nonce !== storedNonce.nonce) {
+      return c.json({ error: { status: 401, message: "Invalid nonce", details: null } }, 401);
+    }
+
+    const issuedTime = new Date(storedNonce.issued_at).getTime();
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000;
+    if (now - issuedTime > fiveMinutes) {
+      return c.json({ error: { status: 401, message: "Nonce expired", details: null } }, 401);
+    }
+
+    const verification = await siweMessage.verify({ signature: body.signature });
+    if (!verification.success) {
+      return c.json({ error: { status: 401, message: "Invalid signature", details: null } }, 401);
+    }
+
+    // Link identity
+    await linkSiweToUser(c.env.DB, userId, siweMessage.address);
+
+    // Delete the used nonce
+    await dbRun(c.env.DB, "DELETE FROM nonces WHERE address = ?", [address]);
+
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('SIWE link error', err);
+    if (err instanceof HttpError) return c.json({ error: { status: err.status, message: err.message, details: err.details ?? null } }, err.status as 400|401|403|404|409|422|500);
+    return c.json({ error: { status: 401, message: 'Linking failed', details: null } }, 401);
+  }
+});
+
+// Auth: Link Google to current user
+app.post('/api/auth/link/google', requireAuthentication, async (c) => {
+  const userId = c.get('userId');
+  const body = await readJson<{ idToken: string; projectId?: string }>(c.req.raw);
+  if (!body || !body.idToken) {
+    return c.json({ error: { status: 400, message: "Missing idToken", details: null } }, 400);
+  }
+  const projectId = body.projectId || (c.env as any).FIREBASE_PROJECT_ID;
+  if (!projectId) {
+    return c.json({ error: { status: 500, message: "Server missing FIREBASE_PROJECT_ID", details: null } }, 500);
+  }
+  try {
+    const info = await verifyFirebaseIdToken(body.idToken, projectId);
+    await linkGoogleToUser(c.env.DB, userId, info.uid, info.email, info.name);
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('Google link error', err);
+    if (err instanceof HttpError) return c.json({ error: { status: err.status, message: err.message, details: err.details ?? null } }, err.status as 400|401|403|404|409|422|500);
+    return c.json({ error: { status: 401, message: 'Linking failed', details: null } }, 401);
   }
 });
 
@@ -172,7 +284,7 @@ app.post('/api/auth/logout', (c) => {
 
 // Dashboard data
 app.get('/api/dashboard', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const daysParam = c.req.query('days');
   let days = 30; // default to 30 days
   if (daysParam) {
@@ -218,12 +330,12 @@ app.get('/api/dashboard', async (c) => {
   }
 
   const [headaches, events] = await Promise.all([
-    dbAll<DashboardRow>(c.env.DB, dailyStatsSQL, [startISO, endISO, addr], (row) => ({
+    dbAll<DashboardRow>(c.env.DB, dailyStatsSQL, [startISO, endISO, userId], (row) => ({
       timestamp: row.timestamp,
       severity: row.severity,
       aura: row.aura
     })),
-    dbAll<DashboardRow>(c.env.DB, eventsSQL, [startISO, endISO, addr], (row) => ({
+    dbAll<DashboardRow>(c.env.DB, eventsSQL, [startISO, endISO, userId], (row) => ({
       event_type: row.event_type,
       value: row.value,
       timestamp: row.timestamp
@@ -241,7 +353,7 @@ app.get('/api/dashboard', async (c) => {
 
 // Headache collection - GET and POST
 app.get('/api/headaches', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   
   // Query params
   const limitParam = c.req.query('limit');
@@ -282,7 +394,7 @@ app.get('/api/headaches', async (c) => {
 
   // Add user scoping
   where.push("user_id = ?");
-  binds.push(addr);
+  binds.push(userId);
 
   const whereClause = `WHERE ${where.join(" AND ")}`;
   const sql = `SELECT * FROM headaches ${whereClause} ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
@@ -293,7 +405,7 @@ app.get('/api/headaches', async (c) => {
 });
 
 app.post('/api/headaches', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const body = await readJson<{ severity?: number; aura?: number }>(c.req.raw);
   if (!body) {
     return c.json({ error: { status: 400, message: "Invalid JSON body", details: null } }, 400);
@@ -314,10 +426,10 @@ app.post('/api/headaches', async (c) => {
   const res = await dbRun(
     c.env.DB,
     "INSERT INTO headaches (timestamp, severity, aura, user_id) VALUES (?, ?, ?, ?)",
-    [iso, severity, aura, addr]
+    [iso, severity, aura, userId]
   );
   const id = res.meta.last_row_id;
-  const item = await dbFirst<Headache>(c.env.DB, "SELECT * FROM headaches WHERE id = ? AND user_id = ?", [id, addr], mapHeadache);
+  const item = await dbFirst<Headache>(c.env.DB, "SELECT * FROM headaches WHERE id = ? AND user_id = ?", [id, userId], mapHeadache);
   
   c.header('Location', `/api/headaches/${id}`);
   return c.json(item, 201);
@@ -325,14 +437,14 @@ app.post('/api/headaches', async (c) => {
 
 // Headache item - GET, PATCH, DELETE
 app.get('/api/headaches/:id', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const idStr = c.req.param('id');
   const id = Number(idStr);
   if (!Number.isFinite(id) || id < 1) {
     return c.json({ error: { status: 400, message: "Invalid id", details: null } }, 400);
   }
 
-  const row = await dbFirst<Headache>(c.env.DB, "SELECT * FROM headaches WHERE id = ? AND user_id = ?", [id, addr], mapHeadache);
+  const row = await dbFirst<Headache>(c.env.DB, "SELECT * FROM headaches WHERE id = ? AND user_id = ?", [id, userId], mapHeadache);
   if (!row) {
     return c.json({ error: { status: 404, message: "Not found", details: null } }, 404);
   }
@@ -340,7 +452,7 @@ app.get('/api/headaches/:id', async (c) => {
 });
 
 app.patch('/api/headaches/:id', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const idStr = c.req.param('id');
   const id = Number(idStr);
   if (!Number.isFinite(id) || id < 1) {
@@ -387,24 +499,24 @@ app.patch('/api/headaches/:id', async (c) => {
   }
 
   const sql = `UPDATE headaches SET ${fields.join(", ")} WHERE id = ? AND user_id = ?`;
-  binds.push(id, addr);
+  binds.push(id, userId);
   const result = await dbRun(c.env.DB, sql, binds);
   if (result.meta.changes === 0) {
     return c.json({ error: { status: 404, message: "Not found", details: null } }, 404);
   }
-  const row = await dbFirst<Headache>(c.env.DB, "SELECT * FROM headaches WHERE id = ? AND user_id = ?", [id, addr], mapHeadache);
+  const row = await dbFirst<Headache>(c.env.DB, "SELECT * FROM headaches WHERE id = ? AND user_id = ?", [id, userId], mapHeadache);
   return c.json(row);
 });
 
 app.delete('/api/headaches/:id', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const idStr = c.req.param('id');
   const id = Number(idStr);
   if (!Number.isFinite(id) || id < 1) {
     return c.json({ error: { status: 400, message: "Invalid id", details: null } }, 400);
   }
 
-  const del = await dbRun(c.env.DB, "DELETE FROM headaches WHERE id = ? AND user_id = ?", [id, addr]);
+  const del = await dbRun(c.env.DB, "DELETE FROM headaches WHERE id = ? AND user_id = ?", [id, userId]);
   if (del.meta.changes === 0) {
     return c.json({ error: { status: 404, message: "Not found", details: null } }, 404);
   }
@@ -413,11 +525,11 @@ app.delete('/api/headaches/:id', async (c) => {
 
 // Event types (must come before /api/events/:id to avoid route conflict)
 app.get('/api/events/types', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const types = await dbAll<{ event_type: string }>(
     c.env.DB,
     "SELECT DISTINCT event_type FROM events WHERE user_id = ? ORDER BY event_type",
-    [addr],
+    [userId],
     (row) => ({ event_type: row.event_type || '' })
   );
   
@@ -426,7 +538,7 @@ app.get('/api/events/types', async (c) => {
 
 // Event collection - GET and POST
 app.get('/api/events', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   
   // Query params
   const limitParam = c.req.query('limit');
@@ -464,7 +576,7 @@ app.get('/api/events', async (c) => {
 
   // Add user scoping
   where.push("user_id = ?");
-  binds.push(addr);
+  binds.push(userId);
 
   const whereClause = `WHERE ${where.join(" AND ")}`;
   const sql = `SELECT * FROM events ${whereClause} ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
@@ -475,7 +587,7 @@ app.get('/api/events', async (c) => {
 });
 
 app.post('/api/events', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const body = await readJson<{ event_type?: string; value?: string }>(c.req.raw);
   if (!body) {
     return c.json({ error: { status: 400, message: "Invalid JSON body", details: null } }, 400);
@@ -495,10 +607,10 @@ app.post('/api/events', async (c) => {
   const res = await dbRun(
     c.env.DB,
     "INSERT INTO events (timestamp, event_type, value, user_id) VALUES (?, ?, ?, ?)",
-    [iso, event_type, value, addr]
+    [iso, event_type, value, userId]
   );
   const id = res.meta.last_row_id;
-  const item = await dbFirst<EventItem>(c.env.DB, "SELECT * FROM events WHERE id = ? AND user_id = ?", [id, addr], mapEvent);
+  const item = await dbFirst<EventItem>(c.env.DB, "SELECT * FROM events WHERE id = ? AND user_id = ?", [id, userId], mapEvent);
   
   c.header('Location', `/api/events/${id}`);
   return c.json(item, 201);
@@ -506,14 +618,14 @@ app.post('/api/events', async (c) => {
 
 // Event item - GET, PATCH, DELETE
 app.get('/api/events/:id', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const idStr = c.req.param('id');
   const id = Number(idStr);
   if (!Number.isFinite(id) || id < 1) {
     return c.json({ error: { status: 400, message: "Invalid id", details: null } }, 400);
   }
 
-  const row = await dbFirst<EventItem>(c.env.DB, "SELECT * FROM events WHERE id = ? AND user_id = ?", [id, addr], mapEvent);
+  const row = await dbFirst<EventItem>(c.env.DB, "SELECT * FROM events WHERE id = ? AND user_id = ?", [id, userId], mapEvent);
   if (!row) {
     return c.json({ error: { status: 404, message: "Not found", details: null } }, 404);
   }
@@ -521,7 +633,7 @@ app.get('/api/events/:id', async (c) => {
 });
 
 app.patch('/api/events/:id', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const idStr = c.req.param('id');
   const id = Number(idStr);
   if (!Number.isFinite(id) || id < 1) {
@@ -568,24 +680,24 @@ app.patch('/api/events/:id', async (c) => {
   }
 
   const sql = `UPDATE events SET ${fields.join(", ")} WHERE id = ? AND user_id = ?`;
-  binds.push(id, addr);
+  binds.push(id, userId);
   const result = await dbRun(c.env.DB, sql, binds);
   if (result.meta.changes === 0) {
     return c.json({ error: { status: 404, message: "Not found", details: null } }, 404);
   }
-  const row = await dbFirst<EventItem>(c.env.DB, "SELECT * FROM events WHERE id = ? AND user_id = ?", [id, addr], mapEvent);
+  const row = await dbFirst<EventItem>(c.env.DB, "SELECT * FROM events WHERE id = ? AND user_id = ?", [id, userId], mapEvent);
   return c.json(row);
 });
 
 app.delete('/api/events/:id', async (c) => {
-  const addr = c.get('addr');
+  const userId = c.get('userId');
   const idStr = c.req.param('id');
   const id = Number(idStr);
   if (!Number.isFinite(id) || id < 1) {
     return c.json({ error: { status: 400, message: "Invalid id", details: null } }, 400);
   }
 
-  const del = await dbRun(c.env.DB, "DELETE FROM events WHERE id = ? AND user_id = ?", [id, addr]);
+  const del = await dbRun(c.env.DB, "DELETE FROM events WHERE id = ? AND user_id = ?", [id, userId]);
   if (del.meta.changes === 0) {
     return c.json({ error: { status: 404, message: "Not found", details: null } }, 404);
   }

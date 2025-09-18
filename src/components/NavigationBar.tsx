@@ -1,7 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import WalletButton from './WalletButton'
+import IdentityBadges from './IdentityBadges'
+import AuthButtons from './AuthButtons'
+import { useAuth } from '../hooks/useAuth'
 
 function NavigationBar() {
+  const { isAuthenticated } = useAuth()
   const baseClasses = 'btn-ghost px-3 py-2 rounded-md transition-colors'
   const activeClasses = 'text-[--color-neon-cyan] underline underline-offset-4'
   const inactiveClasses = 'text-[--color-foreground-muted] hover:text-[--color-foreground]'
@@ -40,7 +43,20 @@ function NavigationBar() {
               History
             </NavLink>
           </div>
-          <WalletButton />
+          <div className="flex items-center gap-3">
+            {isAuthenticated && (
+              <NavLink
+                to="/settings"
+                className={({ isActive }) =>
+                  ['hidden sm:inline', baseClasses, isActive ? activeClasses : inactiveClasses].join(' ')
+                }
+              >
+                Settings
+              </NavLink>
+            )}
+            <IdentityBadges />
+            <AuthButtons />
+          </div>
         </div>
       </div>
     </nav>

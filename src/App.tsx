@@ -3,6 +3,7 @@ import HomePage from './HomePage'
 import DashboardPage from './DashboardPage'
 import EntryPage from './EntryPage.jsx'
 import HistoryPage from './HistoryPage.jsx'
+import SettingsPage from './SettingsPage'
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="entry" element={<EntryPage />} />
         <Route path="history" element={<HistoryPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Routes>
     </div>
   )
