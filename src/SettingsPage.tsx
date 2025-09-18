@@ -4,7 +4,7 @@ import type { Identity } from './types'
 import AuthButtons from './components/AuthButtons'
 
 export default function SettingsPage() {
-  const { fetchWithAuth, linkWithGoogle, linkWithSiwe, isAuthenticated, identities: cachedIdentities, refreshIdentities } = useAuth()
+  const { linkWithGoogle, linkWithSiwe, isAuthenticated, identities: cachedIdentities, refreshIdentities } = useAuth()
   const [identities, setIdentities] = useState<Identity[]>(cachedIdentities ?? [])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

@@ -5,7 +5,8 @@
 // - JWKS: https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com
 // We validate using jose and the Workers Web Crypto; we cache keys for performance.
 
-import { jwtVerify, importX509, JWTPayload } from "jose";
+import { jwtVerify, importX509 } from "jose";
+import type { JWTPayload } from "jose";
 import { HttpError } from "../utils";
 
 const GOOGLE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";

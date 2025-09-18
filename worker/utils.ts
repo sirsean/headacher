@@ -133,6 +133,12 @@ interface DbRow {
   nonce?: string;
   issued_at?: string;
   address?: string;
+  // Identity table fields
+  provider?: string;
+  identifier?: string;
+  email?: string;
+  display_name?: string;
+  created_at?: string;
 }
 
 export function mapHeadache(row: DbRow): Headache {
