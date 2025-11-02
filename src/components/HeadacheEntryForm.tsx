@@ -93,43 +93,68 @@ export default function HeadacheEntryForm({
             New Headache
           </h2>
         )}
-        <form onSubmit={onCreateHeadache} className="grid sm:grid-cols-3 gap-3">
-          <label className="flex flex-col gap-2 sm:col-span-2">
+        <form onSubmit={onCreateHeadache} className="flex flex-col gap-3">
+          {/* Row 1: LED Score buttons spanning full width */}
+          <label className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-sm text-[--color-subtle]">Severity</span>
               <span className="text-sm font-mono">{newHeadache.severity}</span>
             </div>
-            <input
-              className="range-severity"
-              type='range' min={0} max={10} step={1}
-              value={newHeadache.severity}
-              onChange={(e) => setNewHeadache({ ...newHeadache, severity: Number(e.target.value) })}
-              style={{ 
-                ['--percent' as string]: `${(newHeadache.severity / 10) * 100}%`, 
-                ['--sev-color' as string]: getSeverityColor(newHeadache.severity) 
-              } as React.CSSProperties}
-            />
+            <div className="flex gap-1 w-full">
+              {Array.from({ length: 11 }, (_, i) => {
+                const value = i;
+                const color = getSeverityColor(value);
+                const isLit = value <= newHeadache.severity;
+                const isActive = value === newHeadache.severity;
+                
+                let className = 'btn-led ';
+                if (isActive) {
+                  className += 'btn-led-active';
+                } else if (isLit) {
+                  className += 'btn-led-lit';
+                } else {
+                  className += 'btn-led-dim';
+                }
+                
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className={className}
+                    style={{ ['--sev-color' as string]: color } as React.CSSProperties}
+                    onClick={() => setNewHeadache({ ...newHeadache, severity: value })}
+                    aria-label={`Severity ${value}`}
+                    aria-pressed={isActive}
+                  >
+                    {value}
+                  </button>
+                );
+              })}
+            </div>
           </label>
-          <div className="flex flex-col gap-1">
-            <span className="text-sm text-[--color-subtle]">Aura</span>
-            <button
-              type="button"
-              className={`inline-flex items-center justify-center w-28 rounded-full px-3 py-1.5 border transition-colors ${
-                newHeadache.aura === 1 
-                  ? 'border-[var(--color-neon-lime)] bg-[var(--color-neon-lime)] text-[#0b0b12]' 
-                  : 'border-[var(--color-danger)] bg-[var(--color-danger)] text-white'
-              }`}
-              onClick={() => setNewHeadache({ ...newHeadache, aura: (newHeadache.aura === 1 ? 0 : 1) as 0 | 1 })}
-              aria-pressed={newHeadache.aura === 1}
-              aria-label="Toggle aura"
-            >
-              <span className="text-xs font-semibold tracking-wide">
-                {newHeadache.aura === 1 ? 'YES' : 'NO'}
-              </span>
-            </button>
-          </div>
-          <div className="sm:col-span-3">
-            <button type='submit' className="btn btn-primary">Create</button>
+
+          {/* Row 2: Aura toggle (left) and Submit button (right) */}
+          <div className="flex items-end gap-3">
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <span className="text-sm text-[--color-subtle]">Aura</span>
+              <button
+                type="button"
+                className={`inline-flex items-center justify-center w-20 rounded-full px-3 py-1.5 border transition-colors ${
+                  newHeadache.aura === 1 
+                    ? 'border-[var(--color-neon-lime)] bg-[var(--color-neon-lime)] text-[#0b0b12]' 
+                    : 'border-[var(--color-danger)] bg-[var(--color-danger)] text-white'
+                }`}
+                onClick={() => setNewHeadache({ ...newHeadache, aura: (newHeadache.aura === 1 ? 0 : 1) as 0 | 1 })}
+                aria-pressed={newHeadache.aura === 1}
+                aria-label="Toggle aura"
+              >
+                <span className="text-xs font-semibold tracking-wide">
+                  {newHeadache.aura === 1 ? 'YES' : 'NO'}
+                </span>
+              </button>
+            </div>
+            
+            <button type='submit' className="btn btn-primary flex-1">Create</button>
           </div>
         </form>
       </div>

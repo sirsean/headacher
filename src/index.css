@@ -139,3 +139,46 @@ input, select, textarea {
   box-shadow: 0 0 10px color-mix(in oklch, var(--sev-color) 60%, transparent);
   cursor: pointer;
 }
+
+/* LED-style severity buttons */
+.btn-led {
+  @apply inline-flex items-center justify-center rounded-md px-2 py-2 text-sm font-medium transition-all;
+  flex: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+/* Dim/inactive state - not lit up */
+.btn-led-dim {
+  background: transparent;
+  border-color: color-mix(in oklch, var(--color-subtle) 20%, transparent);
+  color: color-mix(in oklch, var(--color-subtle) 60%, transparent);
+}
+
+/* Lit state - illuminated but not selected */
+.btn-led-lit {
+  border-color: var(--sev-color);
+  background: color-mix(in oklch, var(--sev-color) 35%, transparent);
+  color: var(--color-ink);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--sev-color) 40%, transparent);
+}
+
+/* Active/selected state - brightest glow */
+.btn-led-active {
+  border-color: var(--sev-color);
+  background: color-mix(in oklch, var(--sev-color) 60%, transparent);
+  color: var(--color-ink);
+  box-shadow: 
+    0 0 12px color-mix(in oklch, var(--sev-color) 60%, transparent),
+    0 0 20px color-mix(in oklch, var(--sev-color) 30%, transparent),
+    inset 0 0 8px color-mix(in oklch, var(--sev-color) 40%, transparent);
+  font-weight: 700;
+}
+
+/* Responsive sizing for mobile */
+@media (max-width: 640px) {
+  .btn-led {
+    @apply px-1 py-3 text-xs;
+  }
+}
