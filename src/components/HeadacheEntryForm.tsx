@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useMutations } from '../hooks/useMutations'
 import { useNotifications } from '../hooks/useNotifications'
 import TypeaheadInput from './TypeaheadInput'
@@ -27,6 +27,8 @@ export default function HeadacheEntryForm({
   const [typeaheadReload, setTypeaheadReload] = useState(0)
   const { addHeadache, addEvent } = useMutations()
   const { success, error: showError } = useNotifications()
+  const [isDragging, setIsDragging] = useState(false)
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   async function onCreateHeadache(ev: React.FormEvent) {
     ev.preventDefault()
@@ -42,6 +44,52 @@ export default function HeadacheEntryForm({
       showError(errorMsg)
     }
   }
+
+  const handleDragStart = useCallback((value: number) => {
+    setIsDragging(true)
+    setNewHeadache((prev) => ({ ...prev, severity: value }))
+  }, [])
+
+  const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+    // Get the position from mouse or touch
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+    
+    // Find which button we're over
+    for (let i = 0; i < buttonRefs.current.length; i++) {
+      const button = buttonRefs.current[i]
+      if (!button) continue
+      
+      const rect = button.getBoundingClientRect()
+      if (clientX >= rect.left && clientX <= rect.right) {
+        setNewHeadache((prev) => ({ ...prev, severity: i }))
+        break
+      }
+    }
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
+  // Setup global mouse/touch listeners for dragging
+  useEffect(() => {
+    if (isDragging) {
+      const onMove = (e: Event) => handleDragMove(e as MouseEvent | TouchEvent)
+      const onEnd = () => handleDragEnd()
+      
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onEnd)
+      window.addEventListener('touchmove', onMove, { passive: false })
+      window.addEventListener('touchend', onEnd)
+      
+      return () => {
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onEnd)
+        window.removeEventListener('touchmove', onMove)
+        window.removeEventListener('touchend', onEnd)
+      }
+    }
+  }, [isDragging, handleDragMove, handleDragEnd])
 
   async function onCreateEvent(ev: React.FormEvent) {
     ev.preventDefault()
@@ -119,10 +167,13 @@ export default function HeadacheEntryForm({
                 return (
                   <button
                     key={value}
+                    ref={(el) => { buttonRefs.current[value] = el }}
                     type="button"
                     className={className}
                     style={{ ['--sev-color' as string]: color } as React.CSSProperties}
                     onClick={() => setNewHeadache({ ...newHeadache, severity: value })}
+                    onMouseDown={() => handleDragStart(value)}
+                    onTouchStart={() => handleDragStart(value)}
                     aria-label={`Severity ${value}`}
                     aria-pressed={isActive}
                   >
