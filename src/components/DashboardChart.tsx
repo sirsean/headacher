@@ -10,6 +10,7 @@ import {
   Tooltip,
   Legend,
   ReferenceDot,
+  Cell,
 } from "recharts";
 import { getDashboardData, type DashboardData } from "../api";
 import { useAuth } from "../hooks/useAuth";
@@ -90,6 +91,12 @@ function aggregateDataByLocalDate(
       has_aura: auraCount > 0,
       events_count: dayEvents.length,
       events: dayEvents,
+      headaches: dayHeadaches.map((h, idx) => ({
+        id: `${dateStr}-${idx}`,
+        timestamp: h.timestamp,
+        severity: h.severity,
+        aura: h.aura === 1,
+      })),
     });
   }
 
@@ -111,6 +118,75 @@ interface ChartDataPoint {
     value: string;
     timestamp: string;
   }>;
+  headaches: Array<{
+    id: string;
+    timestamp: string;
+    severity: number;
+    aura: boolean;
+  }>;
+}
+
+// Map severity values (0-10) to colors using theme variables
+// Matches the color scheme used in HeadacheEntryForm buttons
+function getSeverityColor(severity: number): string {
+  if (severity <= 3) {
+    return "var(--color-neon-lime)";
+  }
+  if (severity <= 6) {
+    return "var(--color-attention)";
+  }
+  if (severity <= 8) {
+    return "var(--color-warn)";
+  }
+  return "var(--color-alert)";
+}
+
+interface BarDataPoint {
+  displayDate: string;
+  severity: number;
+  id: string;
+  aura: boolean;
+  timestamp: string;
+  color: string;
+  dateData: ChartDataPoint; // reference to full day data for tooltip
+}
+
+// Transform aggregated chart data into individual bar data points
+// Returns a flat array where each element represents one bar to render
+function transformDataForBars(chartData: ChartDataPoint[]): BarDataPoint[] {
+  const barData: BarDataPoint[] = [];
+  
+  chartData.forEach((dayData) => {
+    dayData.headaches.forEach((headache) => {
+      barData.push({
+        displayDate: dayData.displayDate,
+        severity: headache.severity,
+        id: headache.id,
+        aura: headache.aura,
+        timestamp: headache.timestamp,
+        color: getSeverityColor(headache.severity),
+        dateData: dayData,
+      });
+    });
+  });
+  
+  return barData;
+}
+
+// Merge bar data back into chart data structure for Recharts
+// This creates dynamic properties for each headache entry
+function mergeBarDataIntoChartData(chartData: ChartDataPoint[], barData: BarDataPoint[]) {
+  const merged = chartData.map(day => ({ ...day }));
+  
+  barData.forEach((bar, index) => {
+    const dayIndex = merged.findIndex(d => d.displayDate === bar.displayDate);
+    if (dayIndex >= 0) {
+      // Add a unique property for this headache entry
+      (merged[dayIndex] as any)[`headache_${index}`] = bar.severity;
+    }
+  });
+  
+  return merged;
 }
 
 function CustomTooltip({
@@ -118,64 +194,146 @@ function CustomTooltip({
   payload,
 }: {
   active?: boolean;
-  payload?: Array<{ payload: ChartDataPoint }>;
+  payload?: Array<{ payload: BarDataPoint | ChartDataPoint; dataKey?: string }>;
 }) {
   if (!active || !payload || !payload.length) return null;
 
-  const data = payload[0].payload as ChartDataPoint;
+  // Determine if hovering over a bar (BarDataPoint) or line (ChartDataPoint)
+  const firstPayload = payload[0].payload;
+  const isBarHover = "dateData" in firstPayload;
+  
+  if (isBarHover) {
+    // Individual bar tooltip
+    const barData = firstPayload as BarDataPoint;
+    const dayData = barData.dateData;
+    const timestamp = new Date(barData.timestamp);
+    const timeStr = timestamp.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
 
-  return (
-    <div className="panel bg-[--color-panel] border border-[--color-neon-violet] p-3 rounded-lg shadow-lg">
-      <p className="text-sm font-display text-[--color-neon-cyan] mb-2">
-        {data.displayDate}
-      </p>
+    return (
+      <div className="panel bg-[--color-panel] border border-[--color-neon-violet] p-3 rounded-lg shadow-lg">
+        <p className="text-sm font-display text-[--color-neon-cyan] mb-2">
+          {dayData.displayDate}
+        </p>
 
-      {data.headache_count > 0 ? (
-        <div className="space-y-1 text-xs">
+        {/* Individual Entry */}
+        <div className="space-y-1 text-xs mb-2 pb-2 border-b border-[--color-neon-violet]">
+          <p className="font-semibold text-[--color-attention]">Individual Entry:</p>
           <p>
-            <span className="text-[--color-subtle]">Count:</span>{" "}
-            {data.headache_count} headache{data.headache_count > 1 ? "s" : ""}
+            <span className="text-[--color-subtle]">Time:</span> {timeStr}
           </p>
           <p>
-            <span className="text-[--color-subtle]">Severity:</span>{" "}
-            {data.min_severity === data.max_severity
-              ? data.min_severity
-              : `${data.min_severity} - ${data.max_severity}`}
+            <span className="text-[--color-subtle]">Severity:</span> {barData.severity}/10
           </p>
           <p>
-            <span className="text-[--color-subtle]">Average:</span>{" "}
-            {data.avg_severity}
+            <span className="text-[--color-subtle]">Aura:</span>{" "}
+            {barData.aura ? (
+              <span className="text-[--color-alert]">Yes 🌟</span>
+            ) : (
+              "No"
+            )}
           </p>
-          {data.has_aura && (
-            <p className="text-[--color-alert]">🌟 Aura present</p>
-          )}
         </div>
-      ) : (
-        <p className="text-xs text-[--color-subtle]">No headaches</p>
-      )}
 
-      {data.events.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-[--color-neon-violet]">
-          <p className="text-xs text-[--color-attention] mb-1">
-            Events ({data.events.length}):
-          </p>
-          {data.events.slice(0, 3).map((event, i) => (
-            <p key={i} className="text-xs text-[--color-subtle]">
-              • [{event.event_type}]{" "}
-              {event.value.length > 20
-                ? event.value.substring(0, 20) + "..."
-                : event.value}
+        {/* Daily Summary */}
+        {dayData.headache_count > 1 && (
+          <div className="space-y-1 text-xs">
+            <p className="font-semibold text-[--color-attention]">Daily Summary:</p>
+            <p>
+              <span className="text-[--color-subtle]">Total:</span> {dayData.headache_count} headaches
             </p>
-          ))}
-          {data.events.length > 3 && (
-            <p className="text-xs text-[--color-subtle] italic">
-              ...and {data.events.length - 3} more
+            <p>
+              <span className="text-[--color-subtle]">Range:</span>{" "}
+              {dayData.min_severity} - {dayData.max_severity}
             </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
+            <p>
+              <span className="text-[--color-subtle]">Average:</span> {dayData.avg_severity}
+            </p>
+          </div>
+        )}
+
+        {dayData.events.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-[--color-neon-violet]">
+            <p className="text-xs text-[--color-attention] mb-1">
+              Events ({dayData.events.length}):
+            </p>
+            {dayData.events.slice(0, 2).map((event, i) => (
+              <p key={i} className="text-xs text-[--color-subtle]">
+                • [{event.event_type}]{" "}
+                {event.value.length > 20
+                  ? event.value.substring(0, 20) + "..."
+                  : event.value}
+              </p>
+            ))}
+            {dayData.events.length > 2 && (
+              <p className="text-xs text-[--color-subtle] italic">
+                ...and {dayData.events.length - 2} more
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  } else {
+    // Line or day summary tooltip
+    const data = firstPayload as ChartDataPoint;
+
+    return (
+      <div className="panel bg-[--color-panel] border border-[--color-neon-violet] p-3 rounded-lg shadow-lg">
+        <p className="text-sm font-display text-[--color-neon-cyan] mb-2">
+          {data.displayDate}
+        </p>
+
+        {data.headache_count > 0 ? (
+          <div className="space-y-1 text-xs">
+            <p>
+              <span className="text-[--color-subtle]">Count:</span>{" "}
+              {data.headache_count} headache{data.headache_count > 1 ? "s" : ""}
+            </p>
+            <p>
+              <span className="text-[--color-subtle]">Severity:</span>{" "}
+              {data.min_severity === data.max_severity
+                ? data.min_severity
+                : `${data.min_severity} - ${data.max_severity}`}
+            </p>
+            <p>
+              <span className="text-[--color-subtle]">Average:</span>{" "}
+              {data.avg_severity}
+            </p>
+            {data.has_aura && (
+              <p className="text-[--color-alert]">🌟 Aura present</p>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-[--color-subtle]">No headaches</p>
+        )}
+
+        {data.events.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-[--color-neon-violet]">
+            <p className="text-xs text-[--color-attention] mb-1">
+              Events ({data.events.length}):
+            </p>
+            {data.events.slice(0, 3).map((event, i) => (
+              <p key={i} className="text-xs text-[--color-subtle]">
+                • [{event.event_type}]{" "}
+                {event.value.length > 20
+                  ? event.value.substring(0, 20) + "..."
+                  : event.value}
+              </p>
+            ))}
+            {data.events.length > 3 && (
+              <p className="text-xs text-[--color-subtle] italic">
+                ...and {data.events.length - 3} more
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 }
 
 interface DashboardChartProps {
@@ -188,6 +346,17 @@ interface DashboardChartProps {
   refreshTrigger?: number;
 }
 
+/**
+ * Dashboard chart component that visualizes headache data over time.
+ * 
+ * Features:
+ * - Individual bars for each headache entry, grouped by day
+ * - Severity-based color coding (0-3: lime green, 4-6: yellow/orange, 7-8: orange, 9-10: red)
+ * - Red dots on bars with aura
+ * - Line chart showing daily average severity
+ * - Green dots at bottom for days with events
+ * - Interactive tooltips showing individual entry details + daily summary
+ */
 export default function DashboardChart({
   days: initialDays = 30,
   height = 320,
@@ -228,6 +397,9 @@ export default function DashboardChart({
   const chartData: ChartDataPoint[] = data
     ? aggregateDataByLocalDate(data.headaches, data.events, data.days_requested)
     : [];
+  
+  const barData: BarDataPoint[] = transformDataForBars(chartData);
+  const mergedData = mergeBarDataIntoChartData(chartData, barData);
 
   if (loading) {
     return (
@@ -284,7 +456,7 @@ export default function DashboardChart({
       <div className="w-full" style={{ height: `${height}px` }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
-            data={chartData}
+            data={mergedData}
             margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
           >
             <CartesianGrid
@@ -307,23 +479,17 @@ export default function DashboardChart({
             <Tooltip content={<CustomTooltip />} />
             {!compact && <Legend />}
 
-            {/* Severity range bars */}
-            <Bar
-              dataKey={(entry: ChartDataPoint) =>
-                entry.max_severity
-                  ? entry.max_severity - (entry.min_severity || 0)
-                  : 0
-              }
-              stackId="severity"
-              fill="color-mix(in oklch, var(--color-neon-cyan) 30%, transparent)"
-              name="Severity Range"
-            />
-            <Bar
-              dataKey="min_severity"
-              stackId="severity"
-              fill="var(--color-neon-cyan)"
-              name="Min Severity"
-            />
+            {/* Individual headache severity bars */}
+            {barData.map((entry, index) => (
+              <Bar
+                key={`bar-${index}`}
+                dataKey={`headache_${index}`}
+                fill={entry.color}
+                barSize={compact ? 6 : 10}
+                name={index === 0 ? "Severity" : undefined}
+                legendType={index === 0 ? "square" : "none"}
+              />
+            ))}
 
             {/* Average line */}
             <Line
@@ -339,20 +505,20 @@ export default function DashboardChart({
               name="Average Severity"
             />
 
-            {/* Aura indicators */}
-            {chartData.map((entry, index) =>
-              entry.has_aura ? (
+            {/* Aura indicators on individual bars */}
+            {barData
+              .filter((entry) => entry.aura)
+              .map((entry) => (
                 <ReferenceDot
-                  key={`aura-${index}`}
+                  key={`aura-${entry.id}`}
                   x={entry.displayDate}
-                  y={entry.max_severity || 0}
+                  y={entry.severity}
                   r={compact ? 4 : 6}
                   fill="var(--color-alert)"
                   stroke="var(--color-bg)"
                   strokeWidth={1}
                 />
-              ) : null,
-            )}
+              ))}
 
             {/* Event indicators */}
             {chartData.map((entry, index) =>
@@ -374,7 +540,7 @@ export default function DashboardChart({
 
       {!compact && (
         <div className="mt-4 text-xs text-[--color-subtle] space-y-1">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-[var(--color-alert)]"></div>
               <span>Aura present</span>
@@ -382,6 +548,9 @@ export default function DashboardChart({
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-[var(--color-neon-lime)]"></div>
               <span>Events recorded</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span>Bar color indicates severity (light = low, dark = high)</span>
             </div>
           </div>
         </div>
