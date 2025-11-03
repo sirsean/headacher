@@ -12,7 +12,7 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string,
   appId: import.meta.env.VITE_FIREBASE_APP_ID as string,
   // Optional
-  measurementId: (import.meta as any).env.VITE_FIREBASE_MEASUREMENT_ID as string | undefined,
+  measurementId: (import.meta.env.VITE_FIREBASE_MEASUREMENT_ID as string | undefined) || undefined,
 }
 
 let app: FirebaseApp

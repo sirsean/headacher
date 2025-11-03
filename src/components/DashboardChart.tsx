@@ -10,7 +10,6 @@ import {
   Tooltip,
   Legend,
   ReferenceDot,
-  Cell,
 } from "recharts";
 import { getDashboardData, type DashboardData } from "../api";
 import { useAuth } from "../hooks/useAuth";
@@ -182,7 +181,7 @@ function mergeBarDataIntoChartData(chartData: ChartDataPoint[], barData: BarData
     const dayIndex = merged.findIndex(d => d.displayDate === bar.displayDate);
     if (dayIndex >= 0) {
       // Add a unique property for this headache entry
-      (merged[dayIndex] as any)[`headache_${index}`] = bar.severity;
+      (merged[dayIndex] as Record<string, unknown>)[`headache_${index}`] = bar.severity;
     }
   });
   

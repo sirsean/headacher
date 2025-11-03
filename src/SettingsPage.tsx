@@ -21,8 +21,8 @@ export default function SettingsPage() {
           await refreshIdentities()
         }
         if (mounted) setIdentities((cachedIdentities ?? []) as Identity[])
-      } catch (e: any) {
-        if (mounted) setError(e?.message || 'Failed to load identities')
+      } catch (e) {
+        if (mounted) setError(e instanceof Error ? e.message : 'Failed to load identities')
       } finally {
         if (mounted) setLoading(false)
       }
@@ -53,8 +53,8 @@ export default function SettingsPage() {
       await linkWithGoogle()
       await refreshIdentities()
       setIdentities((cachedIdentities ?? []) as Identity[])
-    } catch (e: any) {
-      setError(e?.message || 'Failed to link Google')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to link Google')
     } finally {
       setLinking(null)
     }
@@ -67,8 +67,8 @@ export default function SettingsPage() {
       await linkWithSiwe()
       await refreshIdentities()
       setIdentities((cachedIdentities ?? []) as Identity[])
-    } catch (e: any) {
-      setError(e?.message || 'Failed to link wallet')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to link wallet')
     } finally {
       setLinking(null)
     }

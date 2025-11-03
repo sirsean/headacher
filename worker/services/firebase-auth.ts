@@ -63,15 +63,15 @@ export async function verifyFirebaseIdToken(idToken: string, projectId: string):
       audience: projectId,
     });
     payload = verifyRes.payload;
-  } catch (e) {
+  } catch {
     throw new HttpError(401, "Invalid Firebase ID token");
   }
 
   const uid = String(payload.sub || "");
   if (!uid) throw new HttpError(401, "Firebase token missing subject");
 
-  const email = (payload as any).email as string | undefined;
-  const name = (payload as any).name as string | undefined;
+  const email = typeof payload.email === 'string' ? payload.email : undefined;
+  const name = typeof payload.name === 'string' ? payload.name : undefined;
 
   return { uid, email, name };
 }

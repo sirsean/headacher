@@ -7,6 +7,12 @@ import type { EventItem, Headache } from "../src/types";
 import { generateNonce, SiweMessage } from "siwe";
 import { SignJWT } from "jose";
 
+interface Env {
+  DB: D1Database;
+  ASSETS: Fetcher;
+  JWT_SECRET_KEY: string;
+  FIREBASE_PROJECT_ID: string;
+}
 
 // Helper function to read JSON from request
 async function readJson<T = Record<string, unknown>>(request: Request): Promise<T | null> {
@@ -171,7 +177,7 @@ app.post('/api/auth/google/verify', async (c) => {
     if (!body || !body.idToken) {
       return c.json({ error: { status: 400, message: "Missing idToken", details: null } }, 400);
     }
-    const projectId = body.projectId || (c.env as any).FIREBASE_PROJECT_ID;
+    const projectId = body.projectId || c.env.FIREBASE_PROJECT_ID;
     if (!projectId) {
       return c.json({ error: { status: 500, message: "Server missing FIREBASE_PROJECT_ID", details: null } }, 500);
     }
@@ -262,7 +268,7 @@ app.post('/api/auth/link/google', requireAuthentication, async (c) => {
   if (!body || !body.idToken) {
     return c.json({ error: { status: 400, message: "Missing idToken", details: null } }, 400);
   }
-  const projectId = body.projectId || (c.env as any).FIREBASE_PROJECT_ID;
+  const projectId = body.projectId || c.env.FIREBASE_PROJECT_ID;
   if (!projectId) {
     return c.json({ error: { status: 500, message: "Server missing FIREBASE_PROJECT_ID", details: null } }, 500);
   }

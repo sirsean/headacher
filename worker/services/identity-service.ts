@@ -36,9 +36,9 @@ async function getIdentity(db: D1Database, provider: Provider, identifier: strin
       user_id: String(row.user_id),
       provider: String(row.provider) as Provider,
       identifier: String(row.identifier),
-      email: (row as any).email ?? null,
-      display_name: (row as any).display_name ?? null,
-      created_at: (row as any).created_at ?? null,
+      email: typeof row.email === 'string' ? row.email : null,
+      display_name: typeof row.display_name === 'string' ? row.display_name : null,
+      created_at: typeof row.created_at === 'string' ? row.created_at : null,
     })
   );
 }
@@ -46,7 +46,7 @@ async function getIdentity(db: D1Database, provider: Provider, identifier: strin
 async function ensureUser(db: D1Database, userId?: string, profile?: { email?: string | null; display_name?: string | null }): Promise<string> {
   if (userId) {
     // Ensure exists
-    const found = await dbFirst<{ id: string }>(db, "SELECT id FROM users_v2 WHERE id = ?", [userId], (r) => ({ id: String((r as any).id) }));
+    const found = await dbFirst<{ id: string }>(db, "SELECT id FROM users_v2 WHERE id = ?", [userId], (r) => ({ id: String(r.id) }));
     if (!found) {
       // Create explicit user id record
       await dbRun(db, "INSERT INTO users_v2 (id, email, display_name) VALUES (?, ?, ?)", [userId, profile?.email ?? null, profile?.display_name ?? null]);
@@ -100,13 +100,16 @@ export async function linkGoogleToUser(db: D1Database, userId: string, uid: stri
 
 export async function getUserIdentities(db: D1Database, userId: string): Promise<IdentityPublic[]> {
   const sql = "SELECT provider, identifier, email, display_name, created_at FROM identities WHERE user_id = ? ORDER BY created_at";
-  const list = await (await db.prepare(sql).bind(userId).all()).results as any[] | undefined;
-  const rows = list ?? [];
-  return rows.map((r) => ({
-    provider: String(r.provider) as Provider,
-    identifier: String(r.identifier),
-    email: (r as any).email ?? null,
-    display_name: (r as any).display_name ?? null,
-    created_at: (r as any).created_at ?? null,
-  }));
+  const result = await db.prepare(sql).bind(userId).all();
+  const rows = result.results as unknown[] | undefined ?? [];
+  return rows.map((r: unknown) => {
+    const row = r as Record<string, unknown>;
+    return {
+      provider: String(row.provider) as Provider,
+      identifier: String(row.identifier),
+      email: typeof row.email === 'string' ? row.email : null,
+      display_name: typeof row.display_name === 'string' ? row.display_name : null,
+      created_at: typeof row.created_at === 'string' ? row.created_at : null,
+    };
+  });
 }

@@ -18,8 +18,12 @@ export function useHeadacheEntries(options: UseHeadacheEntriesOptions = {}) {
   } = options;
 
   // Memoize parameters to avoid unnecessary re-renders
-  const memoizedHeadachesParams = useMemo(() => headachesParams, [JSON.stringify(headachesParams)])
-  const memoizedEventsParams = useMemo(() => eventsParams, [JSON.stringify(eventsParams)])
+  const headachesParamsKey = JSON.stringify(headachesParams)
+  const eventsParamsKey = JSON.stringify(eventsParams)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const memoizedHeadachesParams = useMemo(() => headachesParams, [headachesParamsKey])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const memoizedEventsParams = useMemo(() => eventsParams, [eventsParamsKey])
 
   const [headaches, setHeadaches] = useState<Headache[]>([])
   const [events, setEvents] = useState<EventItem[]>([])

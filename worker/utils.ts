@@ -225,7 +225,7 @@ export async function requireAuth<T extends { Bindings: Env; Variables: { addr: 
       throw new HttpError(401, "Invalid token: missing subject");
     }
     // Back-compat: allow optional addr claim for legacy flows
-    const addr = (payload as any).siwe_address as string | undefined;
+    const addr = typeof payload.siwe_address === 'string' ? payload.siwe_address : undefined;
     c.set('userId', userId);
     if (addr) c.set('addr', addr);
   } catch {
