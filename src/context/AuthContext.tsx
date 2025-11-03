@@ -141,11 +141,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [authenticateWithSiwe])
 
+  // Helper to exchange Firebase ID token for app JWT
+  const exchangeFirebaseTokenForJWT = useCallback(async (idToken: string) => {
+    const resp = await fetch('/api/auth/google/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    })
+    if (!resp.ok) throw new Error('Google verify failed')
+    const { token } = await resp.json()
+    localStorage.setItem('auth_token', token)
+    setIsAuthenticated(true)
+    setAddress(getAccount(config)?.address ?? null)
+  }, [])
+
   // Initialize auth state on mount and handle session restoration
   useEffect(() => {
     let mounted = true
+    let unsubscribeAuthState: (() => void) | null = null
     
     const initializeAuth = async () => {
+      // Configure Firebase persistence first
+      try {
+        const { configureAuthPersistence } = await import('../config/firebase')
+        await configureAuthPersistence()
+      } catch (error) {
+        console.error('Failed to configure Firebase persistence:', error)
+      }
+
+      // Check for Firebase redirect result first (mobile flow)
+      try {
+        const { handleRedirectResult } = await import('../config/firebase')
+        const firebaseToken = await handleRedirectResult()
+        if (firebaseToken && mounted) {
+          console.log('Redirect result detected, exchanging token')
+          await exchangeFirebaseTokenForJWT(firebaseToken)
+          return // Early exit, we're authenticated
+        }
+      } catch (error) {
+        console.error('Failed to handle redirect result:', error)
+      }
+
+      // Set up Firebase auth state listener
+      try {
+        const { setupAuthStateListener } = await import('../config/firebase')
+        unsubscribeAuthState = setupAuthStateListener(async (user) => {
+          if (!mounted) return
+          
+          const token = localStorage.getItem('auth_token')
+          
+          // If Firebase user exists but we don't have a valid JWT, exchange tokens
+          if (user && (!token || !isTokenValid(token))) {
+            try {
+              console.log('Firebase user detected without valid JWT, exchanging token')
+              const idToken = await user.getIdToken(true)
+              await exchangeFirebaseTokenForJWT(idToken)
+            } catch (error) {
+              console.error('Failed to exchange Firebase token:', error)
+            }
+          }
+        })
+      } catch (error) {
+        console.error('Failed to set up auth state listener:', error)
+      }
+
       // Wait a bit for wallet connection state to be restored by AppKit/Wagmi
       // This is necessary because the wallet connection isn't immediately available on page load
       await new Promise(resolve => setTimeout(resolve, 100))
@@ -203,8 +262,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     return () => {
       mounted = false
+      if (unsubscribeAuthState) {
+        unsubscribeAuthState()
+      }
     }
-  }, [])
+  }, [exchangeFirebaseTokenForJWT, authenticateWithSiwe])
   
   // Set up account watcher for real-time updates
   useEffect(() => {
@@ -314,7 +376,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const r = await signInWithGooglePopup()
           idToken = r.idToken
-        } catch (e) {
+        } catch {
           await signInWithGoogleRedirect()
           // After redirect back, Firebase will have a currentUser; get token then
           const auth = getFirebaseAuth()
@@ -327,22 +389,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!idToken) throw new Error('Failed to obtain Google ID token')
 
-      const resp = await fetch('/api/auth/google/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      })
-      if (!resp.ok) throw new Error('Google verify failed')
-      const { token } = await resp.json()
-      localStorage.setItem('auth_token', token)
-
-      // Mark authenticated; wallet may or may not be connected
-      setIsAuthenticated(true)
-      setAddress(getAccount(config)?.address ?? null)
+      await exchangeFirebaseTokenForJWT(idToken)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [exchangeFirebaseTokenForJWT])
 
   // Link Google to current logged-in account (does not change current JWT)
   const linkWithGoogle = useCallback(async () => {

@@ -3,7 +3,7 @@
 // On mobile we can use redirect, on desktop popup. Analytics is optional.
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth'
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, setPersistence, indexedDBLocalPersistence, type User } from 'firebase/auth'
 import { getAnalytics, isSupported as analyticsIsSupported } from 'firebase/analytics'
 
 const firebaseConfig = {
@@ -49,4 +49,36 @@ export async function signInWithGooglePopup() {
 export async function signInWithGoogleRedirect() {
   const auth = getFirebaseAuth()
   await signInWithRedirect(auth, googleProvider)
+}
+
+// Handle redirect result after user returns from Google sign-in
+export async function handleRedirectResult(): Promise<string | null> {
+  try {
+    const auth = getFirebaseAuth()
+    const result = await getRedirectResult(auth)
+    if (result?.user) {
+      const idToken = await result.user.getIdToken(true)
+      return idToken
+    }
+    return null
+  } catch (error) {
+    console.error('Error handling redirect result:', error)
+    return null
+  }
+}
+
+// Set up Firebase auth state listener
+export function setupAuthStateListener(callback: (user: User | null) => void): () => void {
+  const auth = getFirebaseAuth()
+  return onAuthStateChanged(auth, callback)
+}
+
+// Configure Firebase Auth persistence (call once on app init)
+export async function configureAuthPersistence(): Promise<void> {
+  try {
+    const auth = getFirebaseAuth()
+    await setPersistence(auth, indexedDBLocalPersistence)
+  } catch (error) {
+    console.error('Error configuring Firebase persistence:', error)
+  }
 }
