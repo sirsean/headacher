@@ -6,14 +6,29 @@ import { signMessage, getAccount, disconnect as wagmiDisconnect, getChainId, wat
 import { SiweMessage } from 'siwe'
 import { AuthContext } from './AuthContext'
 
-// Simple JWT token validation (check if expired)
-function isTokenValid(token: string): boolean {
+type AuthProvider = 'SIWE' | 'GOOGLE' | null
+
+interface TokenInfo {
+  valid: boolean
+  authProvider: AuthProvider
+}
+
+// Decode JWT and extract auth provider and validity info
+function getAuthProviderFromToken(token: string | null): TokenInfo {
+  if (!token) {
+    return { valid: false, authProvider: null }
+  }
+  
   try {
     const payload = JSON.parse(atob(token.split('.')[1]))
     const exp = payload.exp * 1000 // Convert to milliseconds
-    return Date.now() < exp
+    const valid = Date.now() < exp
+    const authProvider = (payload.auth_provider === 'SIWE' || payload.auth_provider === 'GOOGLE') 
+      ? payload.auth_provider 
+      : null
+    return { valid, authProvider }
   } catch {
-    return false
+    return { valid: false, authProvider: null }
   }
 }
 
@@ -49,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [authProvider, setAuthProvider] = useState<AuthProvider>(null)
 
   // Handle SIWE authentication when wallet connects
   const authenticateWithSiwe = useCallback(async (userAddress: string, chainId: number) => {
@@ -105,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Set authenticated state
       setIsAuthenticated(true)
       setAddress(userAddress)
+      setAuthProvider('SIWE')
       
       return true
     } catch (error) {
@@ -120,16 +137,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Handle account changes and trigger auth if needed
   const handleAccountChange = useCallback(async (account: { address?: `0x${string}`, isConnected: boolean }) => {
+    // Don't process wallet changes if authenticated via Firebase
+    if (authProvider === 'GOOGLE') {
+      return
+    }
+    
     if (!account.isConnected || !account.address) {
       setAddress(null)
       return
     }
 
     const token = localStorage.getItem('auth_token')
+    const tokenInfo = getAuthProviderFromToken(token)
     
-    if (token && isTokenValid(token)) {
+    if (token && tokenInfo.valid && tokenInfo.authProvider === 'SIWE') {
       setIsAuthenticated(true)
       setAddress(account.address)
+      setAuthProvider('SIWE')
     } else {
       try {
         const chainId = getChainId(config)
@@ -139,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAddress(null)
       }
     }
-  }, [authenticateWithSiwe])
+  }, [authenticateWithSiwe, authProvider])
 
   // Helper to exchange Firebase ID token for app JWT
   const exchangeFirebaseTokenForJWT = useCallback(async (idToken: string) => {
@@ -153,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('auth_token', token)
     setIsAuthenticated(true)
     setAddress(getAccount(config)?.address ?? null)
+    setAuthProvider('GOOGLE')
   }, [])
 
   // Initialize auth state on mount and handle session restoration
@@ -189,9 +214,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!mounted) return
           
           const token = localStorage.getItem('auth_token')
+          const tokenInfo = getAuthProviderFromToken(token)
           
           // If Firebase user exists but we don't have a valid JWT, exchange tokens
-          if (user && (!token || !isTokenValid(token))) {
+          if (user && (!token || !tokenInfo.valid)) {
             try {
               console.log('Firebase user detected without valid JWT, exchanging token')
               const idToken = await user.getIdToken(true)
@@ -205,56 +231,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('Failed to set up auth state listener:', error)
       }
 
+      if (!mounted) return
+      
+      // Check existing token and determine auth flow
+      const token = localStorage.getItem('auth_token')
+      const tokenInfo = getAuthProviderFromToken(token)
+      
+      // Firebase auth flow: token exists and is GOOGLE provider
+      if (tokenInfo.valid && tokenInfo.authProvider === 'GOOGLE') {
+        console.log('Restoring Firebase auth session')
+        setIsAuthenticated(true)
+        setAuthProvider('GOOGLE')
+        setAddress(null) // Firebase auth doesn't require wallet
+        return // Exit early, skip all wallet checks
+      }
+      
+      // SIWE auth flow or no auth: check wallet connection
       // Wait a bit for wallet connection state to be restored by AppKit/Wagmi
-      // This is necessary because the wallet connection isn't immediately available on page load
       await new Promise(resolve => setTimeout(resolve, 100))
       
       if (!mounted) return
       
       const account = getAccount(config)
-      const token = localStorage.getItem('auth_token')
       
-      if (account?.address && token && isTokenValid(token)) {
-        // We have both a connected account and valid token - restore session
-        setIsAuthenticated(true)
-        setAddress(account.address)
-      } else if (token && !isTokenValid(token)) {
-        // Clear expired token
+      // Clear expired token
+      if (token && !tokenInfo.valid) {
         localStorage.removeItem('auth_token')
         setIsAuthenticated(false)
         setAddress(null)
-      } else if (account?.address && (!token || !isTokenValid(token))) {
-        // Account is connected but no valid auth - trigger authentication
+        setAuthProvider(null)
+      }
+      
+      // SIWE token exists and is valid, restore session
+      if (account?.address && tokenInfo.valid && tokenInfo.authProvider === 'SIWE') {
+        console.log('Restoring SIWE auth session')
+        setIsAuthenticated(true)
+        setAddress(account.address)
+        setAuthProvider('SIWE')
+      } else if (account?.address && !tokenInfo.valid) {
+        // Wallet connected but no valid token - trigger SIWE authentication
         try {
           const chainId = getChainId(config)
           await authenticateWithSiwe(account.address, chainId)
         } catch (error) {
           console.error('Initial authentication failed:', error)
-          // Don't disconnect, just clear our auth state
           setAddress(null)
         }
       } else {
+        // No wallet connected and no valid token
         setAddress(null)
-        
-        // If we have a valid token but no account detected yet, 
-        // set up a retry mechanism to check again
-        if (token && isTokenValid(token)) {
-          const retryCount = 5
-          const retryDelay = 500
-          
-          for (let i = 0; i < retryCount; i++) {
-            if (!mounted) return
-            
-            await new Promise(resolve => setTimeout(resolve, retryDelay))
-            const retryAccount = getAccount(config)
-            
-            if (retryAccount?.address) {
-              setIsAuthenticated(true)
-              setAddress(retryAccount.address)
-              return
-            }
-          }
-        }
       }
     }
     
@@ -270,29 +295,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   // Set up account watcher for real-time updates
   useEffect(() => {
+    // Only watch account changes when authenticated via SIWE
+    if (authProvider !== 'SIWE') {
+      return
+    }
+    
     const unwatch = watchAccount(config, {
       onChange: handleAccountChange,
     })
     
     return unwatch
-  }, [handleAccountChange])
+  }, [handleAccountChange, authProvider])
 
   const connect = useCallback(async () => {
     try {
       setLoading(true)
       
+      // If already authenticated via Firebase, this is likely for linking wallet - proceed
+      // If already authenticated via SIWE, this is likely reconnecting - proceed
+      // Otherwise, this is a new wallet connection attempt
+      
       // Check current account state first
       const currentAccount = getAccount(config)
       const currentToken = localStorage.getItem('auth_token')
+      const tokenInfo = getAuthProviderFromToken(currentToken)
       
-      // If already connected with valid auth, don't need to do anything
-      if (currentAccount?.address && currentToken && isTokenValid(currentToken)) {
+      // If already connected with valid SIWE auth, don't need to do anything
+      if (currentAccount?.address && tokenInfo.valid && tokenInfo.authProvider === 'SIWE') {
         setAddress(currentAccount.address)
         return
       }
       
-      // If account is connected but no valid token, authenticate directly
-      if (currentAccount?.address && (!currentToken || !isTokenValid(currentToken))) {
+      // If account is connected but no valid token (or token is not SIWE), authenticate directly
+      if (currentAccount?.address && (!tokenInfo.valid || tokenInfo.authProvider !== 'SIWE')) {
         try {
           const chainId = getChainId(config)
           await authenticateWithSiwe(currentAccount.address, chainId)
@@ -319,21 +354,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const disconnect = useCallback(async () => {
     try {
       setLoading(true)
-      // wagmiDisconnect automatically disconnects any active connector,
-      // including WalletConnect sessions - no additional cleanup needed
-      await wagmiDisconnect(config)
-      setAddress(null)
       
-      // Clear all localStorage to ensure clean state on next login
-      localStorage.clear()
+      // If authenticated via SIWE, disconnect wallet
+      if (authProvider === 'SIWE') {
+        await wagmiDisconnect(config)
+      }
+      
+      // If authenticated via Firebase, sign out
+      if (authProvider === 'GOOGLE') {
+        const { signOut } = await import('../config/firebase')
+        await signOut()
+      }
+      
+      // Clear only app-specific localStorage keys instead of clearing everything
+      localStorage.removeItem('auth_token')
+      
+      setAddress(null)
       setIsAuthenticated(false)
+      setAuthProvider(null)
     } catch (error) {
       console.error('Disconnect failed:', error)
       throw error
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [authProvider])
 
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem('auth_token')
@@ -351,8 +396,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Handle 401 responses by auto-logout
     if (response.status === 401) {
       localStorage.removeItem('auth_token')
+      
+      // Sign out Firebase if authenticated via Google
+      if (authProvider === 'GOOGLE') {
+        const { signOut } = await import('../config/firebase')
+        await signOut().catch(console.error)
+      }
+      
       setIsAuthenticated(false)
       setAddress(null)
+      setAuthProvider(null)
+      
       // Only redirect if we're not already on the home page
       if (window.location.pathname !== '/') {
         window.location.href = '/'
@@ -360,7 +414,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     return response
-  }, [])
+  }, [authProvider])
 
   // Google login via Firebase -> exchange for app JWT
   const loginWithGoogle = useCallback(async () => {
@@ -390,6 +444,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!idToken) throw new Error('Failed to obtain Google ID token')
 
       await exchangeFirebaseTokenForJWT(idToken)
+    } catch (error) {
+      console.error('Google login failed:', error)
+      setAuthProvider(null)
+      throw error
     } finally {
       setLoading(false)
     }
@@ -483,13 +541,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     address,
     isAuthenticated,
     loading,
+    authProvider,
     fetchWithAuth,
     loginWithGoogle,
     linkWithGoogle,
     linkWithSiwe,
     identities,
     refreshIdentities,
-  }), [connect, disconnect, address, isAuthenticated, loading, fetchWithAuth, loginWithGoogle, linkWithGoogle, linkWithSiwe, identities, refreshIdentities])
+  }), [connect, disconnect, address, isAuthenticated, loading, authProvider, fetchWithAuth, loginWithGoogle, linkWithGoogle, linkWithSiwe, identities, refreshIdentities])
 
   return (
     <AuthContext.Provider value={value}>

@@ -3,7 +3,7 @@
 // On mobile we can use redirect, on desktop popup. Analytics is optional.
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, setPersistence, indexedDBLocalPersistence, type User } from 'firebase/auth'
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, setPersistence, indexedDBLocalPersistence, signOut as firebaseSignOut, type User } from 'firebase/auth'
 import { getAnalytics, isSupported as analyticsIsSupported } from 'firebase/analytics'
 
 const firebaseConfig = {
@@ -81,4 +81,10 @@ export async function configureAuthPersistence(): Promise<void> {
   } catch (error) {
     console.error('Error configuring Firebase persistence:', error)
   }
+}
+
+// Sign out from Firebase
+export async function signOut(): Promise<void> {
+  const auth = getFirebaseAuth()
+  await firebaseSignOut(auth)
 }

@@ -6,6 +6,7 @@ export interface AuthContextValue {
   address: string | null
   isAuthenticated: boolean
   loading: boolean
+  authProvider: 'SIWE' | 'GOOGLE' | null
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>
   loginWithGoogle: () => Promise<void>
   linkWithGoogle: () => Promise<boolean>
