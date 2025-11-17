@@ -24,6 +24,7 @@ const SEVERITY_DISTRIBUTION = {
 
 const AURA_PROBABILITY = 0.20; // 20% chance of aura
 const MAX_ENTRIES_PER_DAY = 2; // 0-2 random entries per day
+const ZERO_ENTRIES_PROBABILITY = 0.05; // 5% chance of no headaches on a given day
 
 /**
  * Generate a random integer between min and max (inclusive)
@@ -115,8 +116,10 @@ function generateHeadacheEntries(userId: string, days: number): Array<{ timestam
     const date = new Date(now);
     date.setDate(date.getDate() - daysAgo);
     
-    // Random number of entries for this day (0-2)
-    const numEntries = randomInt(0, MAX_ENTRIES_PER_DAY);
+    // Random number of entries for this day (1-2, or 0 with 5% probability)
+    const numEntries = Math.random() < ZERO_ENTRIES_PROBABILITY 
+      ? 0 
+      : randomInt(1, MAX_ENTRIES_PER_DAY);
     
     for (let i = 0; i < numEntries; i++) {
       const timestamp = generateRandomTimestamp(
