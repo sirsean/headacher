@@ -71,6 +71,16 @@ export default function HomePage() {
   // Show authenticated user dashboard
   return (
     <div className="space-y-6">
+      {/* Quick Entry - Headache Severity */}
+      <div>
+        <h3 className="font-display text-lg mb-3 text-[--color-neon-violet]">Quick Entry</h3>
+        <HeadacheEntryForm 
+          compact={true}
+          showTitle={false}
+          onSuccess={handleEntrySuccess}
+        />
+      </div>
+
       {/* Dashboard Chart */}
       <DashboardChart 
         days={7}
@@ -82,26 +92,15 @@ export default function HomePage() {
         refreshTrigger={refreshTrigger}
       />
 
-      {/* Quick Entry Forms and Stats */}
+      {/* Quick Event and Stats */}
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <div>
-            <h3 className="font-display text-lg mb-3 text-[--color-neon-violet]">Quick Entry</h3>
-            <HeadacheEntryForm 
-              compact={true}
-              showTitle={false}
-              onSuccess={handleEntrySuccess}
-            />
-          </div>
-          
-          <div>
-            <h3 className="font-display text-lg mb-3 text-[--color-neon-cyan]">Quick Event</h3>
-            <EventEntryForm 
-              compact={true}
-              showTitle={false}
-              onSuccess={handleEntrySuccess}
-            />
-          </div>
+        <div>
+          <h3 className="font-display text-lg mb-3 text-[--color-neon-cyan]">Quick Event</h3>
+          <EventEntryForm 
+            compact={true}
+            showTitle={false}
+            onSuccess={handleEntrySuccess}
+          />
         </div>
         
         <div className="panel">
