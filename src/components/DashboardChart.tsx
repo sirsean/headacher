@@ -399,6 +399,9 @@ export default function DashboardChart({
   
   const barData: BarDataPoint[] = transformDataForBars(chartData);
   const mergedData = mergeBarDataIntoChartData(chartData, barData);
+  
+  // Only show individual bars and aura indicators for short date ranges
+  const showIndividualBars = days < 10;
 
   if (loading) {
     return (
@@ -478,8 +481,8 @@ export default function DashboardChart({
             <Tooltip content={<CustomTooltip />} />
             {!compact && <Legend />}
 
-            {/* Individual headache severity bars */}
-            {barData.map((entry, index) => (
+            {/* Individual headache severity bars - only show for short date ranges */}
+            {showIndividualBars && barData.map((entry, index) => (
               <Bar
                 key={`bar-${index}`}
                 dataKey={`headache_${index}`}
@@ -504,8 +507,8 @@ export default function DashboardChart({
               name="Average Severity"
             />
 
-            {/* Aura indicators on individual bars */}
-            {barData
+            {/* Aura indicators on individual bars - only show when bars are visible */}
+            {showIndividualBars && barData
               .filter((entry) => entry.aura)
               .map((entry) => (
                 <ReferenceDot
