@@ -494,6 +494,20 @@ export default function DashboardChart({
               />
             ))}
 
+            {/* Min severity line */}
+            <Line
+              type="monotone"
+              dataKey="min_severity"
+              stroke="var(--color-neon-lime)"
+              strokeWidth={2}
+              dot={{
+                fill: "var(--color-neon-lime)",
+                strokeWidth: 2,
+                r: compact ? 2 : 3,
+              }}
+              name="Min Severity"
+            />
+
             {/* Average line */}
             <Line
               type="monotone"
@@ -506,6 +520,20 @@ export default function DashboardChart({
                 r: compact ? 2 : 3,
               }}
               name="Average Severity"
+            />
+
+            {/* Max severity line */}
+            <Line
+              type="monotone"
+              dataKey="max_severity"
+              stroke="var(--color-alert)"
+              strokeWidth={2}
+              dot={{
+                fill: "var(--color-alert)",
+                strokeWidth: 2,
+                r: compact ? 2 : 3,
+              }}
+              name="Max Severity"
             />
 
             {/* Aura indicators on individual bars - only show when bars are visible */}
