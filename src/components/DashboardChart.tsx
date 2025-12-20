@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { getDashboardData, type DashboardData } from "../api";
 import { useAuth } from "../hooks/useAuth";
+import CustomDropdown from "./CustomDropdown";
 
 // Helper function to get local date string from UTC timestamp
 function getLocalDateString(utcTimestamp: string): string {
@@ -431,20 +432,20 @@ export default function DashboardChart({
         )}
         {showControls && (
           <div className="flex items-center gap-3">
-            <label className="text-sm text-[--color-subtle]">
-              Days:
-              <select
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-[--color-subtle]">Days:</span>
+              <CustomDropdown
                 value={days}
-                onChange={(e) => setDays(Number(e.target.value))}
-                className="ml-2 rounded-md border border-[color:color-mix(in_oklch,var(--color-neon-cyan)_22%,transparent)] bg-transparent px-2 py-1 text-[--color-ink]"
-              >
-                <option value={7}>7 days</option>
-                <option value={14}>14 days</option>
-                <option value={30}>30 days</option>
-                <option value={60}>60 days</option>
-                <option value={90}>90 days</option>
-              </select>
-            </label>
+                onChange={setDays}
+                options={[
+                  { value: 7, label: "7 days" },
+                  { value: 14, label: "14 days" },
+                  { value: 30, label: "30 days" },
+                  { value: 60, label: "60 days" },
+                  { value: 90, label: "90 days" },
+                ]}
+              />
+            </div>
             <button
               onClick={loadData}
               className="btn-ghost text-sm hover:text-[--color-neon-cyan] transition-colors"

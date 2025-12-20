@@ -82,6 +82,32 @@ input, select, textarea {
   color: var(--color-ink);
   caret-color: var(--color-neon-cyan);
 }
+
+/* Style select dropdowns */
+select {
+  background-color: var(--color-panel);
+  border-color: color-mix(in oklch, var(--color-neon-cyan) 40%, transparent);
+}
+select:hover {
+  border-color: var(--color-neon-cyan);
+}
+select:focus {
+  outline: none;
+  border-color: var(--color-neon-cyan);
+  box-shadow: 0 0 0 1px var(--color-neon-cyan);
+}
+
+/* Style option elements (limited browser support) */
+select option {
+  background-color: var(--color-panel);
+  color: var(--color-ink);
+}
+select option:checked,
+select option:hover {
+  background-color: color-mix(in oklch, var(--color-neon-cyan) 30%, var(--color-panel));
+  color: var(--color-ink);
+}
+
 ::placeholder { color: color-mix(in oklch, var(--color-subtle) 80%, var(--color-ink) 20%); }
 
 /* Severity range styling */
