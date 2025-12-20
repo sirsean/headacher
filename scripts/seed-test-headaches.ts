@@ -146,28 +146,41 @@ function generateHeadacheEntries(userId: string, days: number): Array<{ timestam
 function buildInsertSQL(userId: string, entries: Array<{ timestamp: string; severity: number; aura: number }>): string {
   const values = entries.map(entry => 
     `('${entry.timestamp}', ${entry.severity}, ${entry.aura}, '${userId}')`
-  ).join(',\n  ');
+  ).join(', ');
   
-  return `INSERT INTO headaches (timestamp, severity, aura, user_id) VALUES\n  ${values};`;
+  return `INSERT INTO headaches (timestamp, severity, aura, user_id) VALUES ${values};`;
 }
 
 /**
- * Execute the SQL against the local database
+ * Execute the SQL against the local database in batches
  */
-function executeSQL(sql: string): void {
+function executeSQL(userId: string, entries: Array<{ timestamp: string; severity: number; aura: number }>): void {
   console.log('\n📝 Executing SQL against LOCAL database...');
   console.log('⚠️  Using --local flag - this will NOT affect production!\n');
   
+  const BATCH_SIZE = 20; // Insert 20 records at a time
+  const batches = [];
+  
+  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+    batches.push(entries.slice(i, i + BATCH_SIZE));
+  }
+  
+  console.log(`Inserting ${entries.length} entries in ${batches.length} batches...`);
+  
   try {
-    // Escape the SQL for shell execution
-    const escapedSQL = sql.replace(/"/g, '\\"');
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      const sql = buildInsertSQL(userId, batch);
+      
+      execSync(
+        `wrangler d1 execute ${DATABASE_NAME} --local --command "${sql}"`,
+        { encoding: 'utf-8' }
+      );
+      
+      process.stdout.write(`\rBatch ${i + 1}/${batches.length} completed`);
+    }
     
-    const result = execSync(
-      `wrangler d1 execute ${DATABASE_NAME} --command "${escapedSQL}" --local`,
-      { encoding: 'utf-8', stdio: 'inherit' }
-    );
-    
-    console.log('\n✅ Successfully inserted test data into LOCAL database');
+    console.log('\n\n✅ Successfully inserted test data into LOCAL database');
   } catch (error) {
     console.error('\n❌ Error executing SQL:', error);
     process.exit(1);
@@ -227,11 +240,9 @@ function main(): void {
     return;
   }
   
-  const sql = buildInsertSQL(userId, entries);
-  
   printSummary(entries);
   
-  executeSQL(sql);
+  executeSQL(userId, entries);
   
   console.log('\n🎉 Done! You can now test your charts with this data.');
   console.log('💡 To verify: npm run dev and navigate to your dashboard\n');
