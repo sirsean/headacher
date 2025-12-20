@@ -10,11 +10,20 @@ import type { DashboardData } from './api'
 export default function HomePage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, loading } = useAuth()
 
   const handleEntrySuccess = () => {
     // Trigger a refresh of the dashboard data when a new entry is created
     setRefreshTrigger(prev => prev + 1)
+  }
+
+  // Show loading state while checking authentication
+  if (loading) {
+    return (
+      <div className="panel text-center">
+        <p className="text-[--color-subtle]">Loading...</p>
+      </div>
+    )
   }
 
   // Show login required state when not authenticated

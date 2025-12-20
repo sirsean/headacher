@@ -63,7 +63,7 @@ const config = wagmiAdapter.wagmiConfig
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [authProvider, setAuthProvider] = useState<AuthProvider>(null)
 
   // Handle SIWE authentication when wallet connects
@@ -201,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (firebaseToken && mounted) {
           console.log('Redirect result detected, exchanging token')
           await exchangeFirebaseTokenForJWT(firebaseToken)
+          setLoading(false)
           return // Early exit, we're authenticated
         }
       } catch (error) {
@@ -243,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(true)
         setAuthProvider('GOOGLE')
         setAddress(null) // Firebase auth doesn't require wallet
+        setLoading(false)
         return // Exit early, skip all wallet checks
       }
       
@@ -281,6 +283,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // No wallet connected and no valid token
         setAddress(null)
       }
+      
+      // Auth initialization complete
+      setLoading(false)
     }
     
     initializeAuth()
