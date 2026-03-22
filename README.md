@@ -55,9 +55,10 @@ export JWT_SECRET_KEY="YOUR_GENERATED_SECRET_HERE"
 
 ## Local development with D1
 
-1) Apply migrations to local D1 (uses preview_database_id from wrangler.toml):
+1) Apply migrations to local D1 (database name from wrangler.toml; local file uses `preview_database_id`):
 
-- npx wrangler d1 migrations apply headacher --local
+- npm run db:migrate
+  (equivalent: `npx wrangler d1 migrations apply headacher-production --local`)
 
 2) Run the unified dev server (SPA + Worker API via Cloudflare Vite plugin):
 
@@ -141,7 +142,8 @@ Preflight requests to /api/* are also handled (OPTIONS) and responses include Ac
 ## Seeding sample data (optional)
 You can manually run the SQL in worker/seed.sql using wrangler d1 execute if you want sample rows:
 
-- npx wrangler d1 execute headacher --local --file=worker/seed.sql
+- npx wrangler d1 execute headacher-production --local --file=worker/seed.sql
+  (or: `npm run db:seed`)
 
 Then list data:
 

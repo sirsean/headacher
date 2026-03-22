@@ -65,6 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [authProvider, setAuthProvider] = useState<AuthProvider>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const clearAuthError = useCallback(() => setAuthError(null), [])
 
   // Handle SIWE authentication when wallet connects
   const authenticateWithSiwe = useCallback(async (userAddress: string, chainId: number) => {
@@ -122,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAuthenticated(true)
       setAddress(userAddress)
       setAuthProvider('SIWE')
+      setAuthError(null)
       
       return true
     } catch (error) {
@@ -178,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(true)
     setAddress(getAccount(config)?.address ?? null)
     setAuthProvider('GOOGLE')
+    setAuthError(null)
   }, [])
 
   // Initialize auth state on mount and handle session restoration
@@ -424,6 +428,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Google login via Firebase -> exchange for app JWT
   const loginWithGoogle = useCallback(async () => {
     try {
+      setAuthError(null)
       setLoading(true)
       const isNarrow = window.matchMedia('(max-width: 640px)').matches
       const { signInWithGooglePopup, signInWithGoogleRedirect, getFirebaseAuth } = await import('../config/firebase')
@@ -452,7 +457,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Google login failed:', error)
       setAuthProvider(null)
-      throw error
+      const message = error instanceof Error ? error.message : 'Google sign-in failed'
+      setAuthError(message)
     } finally {
       setLoading(false)
     }
@@ -547,13 +553,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated,
     loading,
     authProvider,
+    authError,
+    clearAuthError,
     fetchWithAuth,
     loginWithGoogle,
     linkWithGoogle,
     linkWithSiwe,
     identities,
     refreshIdentities,
-  }), [connect, disconnect, address, isAuthenticated, loading, authProvider, fetchWithAuth, loginWithGoogle, linkWithGoogle, linkWithSiwe, identities, refreshIdentities])
+  }), [connect, disconnect, address, isAuthenticated, loading, authProvider, authError, clearAuthError, fetchWithAuth, loginWithGoogle, linkWithGoogle, linkWithSiwe, identities, refreshIdentities])
 
   return (
     <AuthContext.Provider value={value}>

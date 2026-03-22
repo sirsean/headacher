@@ -6,19 +6,40 @@ import { initializeApp, getApps, type FirebaseApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, setPersistence, indexedDBLocalPersistence, signOut as firebaseSignOut, type User } from 'firebase/auth'
 import { getAnalytics, isSupported as analyticsIsSupported } from 'firebase/analytics'
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID as string,
-  // Optional
-  measurementId: (import.meta.env.VITE_FIREBASE_MEASUREMENT_ID as string | undefined) || undefined,
+const FIREBASE_SETUP_HELP =
+  'Create a Web app in the Firebase console, enable Google as a sign-in provider, add this dev origin under Authentication → Settings → Authorized domains, then put VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, and VITE_FIREBASE_APP_ID in .env.local (see docs/DUAL_AUTH.md). Use the same project ID the Worker verifies (FIREBASE_PROJECT_ID in wrangler).'
+
+function readFirebaseEnv() {
+  return {
+    apiKey: (import.meta.env.VITE_FIREBASE_API_KEY as string | undefined)?.trim() ?? '',
+    authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined)?.trim() ?? '',
+    projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined)?.trim() ?? '',
+    appId: (import.meta.env.VITE_FIREBASE_APP_ID as string | undefined)?.trim() ?? '',
+    measurementId: (import.meta.env.VITE_FIREBASE_MEASUREMENT_ID as string | undefined)?.trim() || undefined,
+  }
+}
+
+/** True when all required Vite Firebase env vars are set (Google sign-in will not work without them). */
+export function isFirebaseConfigured(): boolean {
+  const e = readFirebaseEnv()
+  return Boolean(e.apiKey && e.authDomain && e.projectId && e.appId)
 }
 
 let app: FirebaseApp
 
 export function getFirebaseApp(): FirebaseApp {
+  if (!isFirebaseConfigured()) {
+    throw new Error(`Firebase is not configured. ${FIREBASE_SETUP_HELP}`)
+  }
   if (!app) {
+    const e = readFirebaseEnv()
+    const firebaseConfig = {
+      apiKey: e.apiKey,
+      authDomain: e.authDomain,
+      projectId: e.projectId,
+      appId: e.appId,
+      measurementId: e.measurementId,
+    }
     app = getApps()[0] ?? initializeApp(firebaseConfig)
     // Analytics is optional and only works in browser contexts
     analyticsIsSupported().then((ok) => {

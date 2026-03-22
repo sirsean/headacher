@@ -25,17 +25,17 @@ interface Props {
 }
 
 export default function AuthButtons({ className = '', size = 'sm' }: Props) {
-  const { isAuthenticated, loading, connect, loginWithGoogle, disconnect } = useAuth()
+  const { isAuthenticated, loading, connect, loginWithGoogle, disconnect, authError, clearAuthError } = useAuth()
 
   const btnBase = 'inline-flex items-center justify-center rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2'
   const iconSize = size === 'sm' ? 16 : 18
   const spacing = size === 'sm' ? 'gap-2' : 'gap-3'
-  const container = `flex ${spacing} items-center ${className}`
+  const row = `flex ${spacing} items-center`
   const pill = size === 'sm' ? 'h-8 w-8' : 'h-9 w-9'
 
   if (isAuthenticated) {
     return (
-      <div className={container}>
+      <div className={`${row} ${className}`.trim()}>
         <button
           onClick={() => disconnect()}
           disabled={loading}
@@ -53,25 +53,35 @@ export default function AuthButtons({ className = '', size = 'sm' }: Props) {
   }
 
   return (
-    <div className={container}>
-      <button
-        onClick={() => connect()}
-        disabled={loading}
-        className={`${btnBase} ${pill} bg-[--color-ink] text-white hover:bg-[color:color-mix(in_oklch,var(--color-ink)_85%,white)] disabled:opacity-50`}
-        title="Sign in with Ethereum"
-        aria-label="Sign in with Ethereum"
-      >
-        <EthIcon size={iconSize} />
-      </button>
-      <button
-        onClick={() => loginWithGoogle()}
-        disabled={loading}
-        className={`${btnBase} ${pill} bg-white text-[#1a73e8] border border-[#1a73e8] hover:bg-[#e8f0fe] disabled:opacity-50`}
-        title="Sign in with Google"
-        aria-label="Sign in with Google"
-      >
-        <GoogleIcon size={iconSize} />
-      </button>
+    <div className={`flex flex-col items-stretch gap-1 ${className}`.trim()}>
+      <div className={row}>
+        <button
+          onClick={() => connect()}
+          disabled={loading}
+          className={`${btnBase} ${pill} bg-[--color-ink] text-white hover:bg-[color:color-mix(in_oklch,var(--color-ink)_85%,white)] disabled:opacity-50`}
+          title="Sign in with Ethereum"
+          aria-label="Sign in with Ethereum"
+        >
+          <EthIcon size={iconSize} />
+        </button>
+        <button
+          onClick={() => void loginWithGoogle()}
+          disabled={loading}
+          className={`${btnBase} ${pill} bg-white text-[#1a73e8] border border-[#1a73e8] hover:bg-[#e8f0fe] disabled:opacity-50`}
+          title="Sign in with Google"
+          aria-label="Sign in with Google"
+        >
+          <GoogleIcon size={iconSize} />
+        </button>
+      </div>
+      {authError ? (
+        <p className="text-xs text-red-600 max-w-[min(100%,20rem)]" role="alert">
+          {authError}{' '}
+          <button type="button" className="underline" onClick={clearAuthError}>
+            Dismiss
+          </button>
+        </p>
+      ) : null}
     </div>
   )
 }
