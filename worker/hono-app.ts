@@ -288,44 +288,23 @@ app.post('/api/auth/logout', (c) => {
   return c.json({ success: true, message: "Logged out successfully" });
 });
 
-// Dashboard data
+// Dashboard data (days=0 means all time for this user)
 app.get('/api/dashboard', async (c) => {
   const userId = c.get('userId');
   const daysParam = c.req.query('days');
   let days = 30; // default to 30 days
-  if (daysParam) {
+  let allTime = false;
+  if (daysParam !== undefined && daysParam !== '') {
     const n = Number(daysParam);
-    if (Number.isFinite(n) && n > 0) days = Math.min(365, Math.max(1, Math.trunc(n)));
+    if (Number.isFinite(n) && n === 0) {
+      allTime = true;
+    } else if (Number.isFinite(n) && n > 0) {
+      days = Math.min(365, Math.max(1, Math.trunc(n)));
+    }
   }
 
-  // Calculate date range
   const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(endDate.getDate() - days);
-  const startISO = startDate.toISOString();
   const endISO = endDate.toISOString();
-
-  // Query for daily headache summary with user scoping
-  const dailyStatsSQL = `
-    SELECT 
-      timestamp,
-      severity,
-      aura
-    FROM headaches 
-    WHERE timestamp >= ? AND timestamp <= ? AND user_id = ?
-    ORDER BY timestamp
-  `;
-
-  // Query for events in the same period with user scoping
-  const eventsSQL = `
-    SELECT 
-      event_type,
-      value,
-      timestamp
-    FROM events 
-    WHERE timestamp >= ? AND timestamp <= ? AND user_id = ?
-    ORDER BY timestamp
-  `;
 
   interface DashboardRow {
     timestamp: string;
@@ -335,22 +314,83 @@ app.get('/api/dashboard', async (c) => {
     value?: string;
   }
 
-  const [headaches, events] = await Promise.all([
-    dbAll<DashboardRow>(c.env.DB, dailyStatsSQL, [startISO, endISO, userId], (row) => ({
-      timestamp: row.timestamp,
-      severity: row.severity,
-      aura: row.aura
-    })),
-    dbAll<DashboardRow>(c.env.DB, eventsSQL, [startISO, endISO, userId], (row) => ({
-      event_type: row.event_type,
-      value: row.value,
-      timestamp: row.timestamp
-    }))
-  ]);
+  let headaches: Array<{ timestamp: string; severity?: number; aura?: number }>;
+  let events: Array<{ event_type?: string; value?: string; timestamp: string }>;
 
-  return c.json({ 
-    days_requested: days,
-    start_date: startISO.split('T')[0],
+  if (allTime) {
+    const dailyStatsSQL = `
+      SELECT timestamp, severity, aura
+      FROM headaches
+      WHERE user_id = ?
+      ORDER BY timestamp
+    `;
+    const eventsSQL = `
+      SELECT event_type, value, timestamp
+      FROM events
+      WHERE user_id = ?
+      ORDER BY timestamp
+    `;
+    [headaches, events] = await Promise.all([
+      dbAll<DashboardRow>(c.env.DB, dailyStatsSQL, [userId], (row) => ({
+        timestamp: row.timestamp,
+        severity: row.severity,
+        aura: row.aura
+      })),
+      dbAll<DashboardRow>(c.env.DB, eventsSQL, [userId], (row) => ({
+        event_type: row.event_type,
+        value: row.value,
+        timestamp: row.timestamp
+      }))
+    ]);
+  } else {
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - days);
+    const startISO = startDate.toISOString();
+
+    const dailyStatsSQL = `
+      SELECT 
+        timestamp,
+        severity,
+        aura
+      FROM headaches 
+      WHERE timestamp >= ? AND timestamp <= ? AND user_id = ?
+      ORDER BY timestamp
+    `;
+    const eventsSQL = `
+      SELECT 
+        event_type,
+        value,
+        timestamp
+      FROM events 
+      WHERE timestamp >= ? AND timestamp <= ? AND user_id = ?
+      ORDER BY timestamp
+    `;
+    [headaches, events] = await Promise.all([
+      dbAll<DashboardRow>(c.env.DB, dailyStatsSQL, [startISO, endISO, userId], (row) => ({
+        timestamp: row.timestamp,
+        severity: row.severity,
+        aura: row.aura
+      })),
+      dbAll<DashboardRow>(c.env.DB, eventsSQL, [startISO, endISO, userId], (row) => ({
+        event_type: row.event_type,
+        value: row.value,
+        timestamp: row.timestamp
+      }))
+    ]);
+  }
+
+  const allTimestamps = [
+    ...headaches.map((h) => h.timestamp),
+    ...events.map((e) => e.timestamp)
+  ];
+  const startDateStr =
+    allTimestamps.length > 0
+      ? allTimestamps.reduce((a, b) => (a < b ? a : b)).split('T')[0]
+      : endISO.split('T')[0];
+
+  return c.json({
+    days_requested: allTime ? 0 : days,
+    start_date: startDateStr,
     end_date: endISO.split('T')[0],
     headaches,
     events

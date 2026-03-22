@@ -129,6 +129,7 @@ export async function listEventTypes(fetchWithAuth?: AuthenticatedFetch): Promis
 
 // Dashboard
 export interface DashboardData {
+  /** Window length in days, or 0 when the API returned all-time data for the user. */
   days_requested: number
   start_date: string
   end_date: string

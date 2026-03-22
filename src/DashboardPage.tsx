@@ -80,7 +80,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-[--color-subtle]">Total Days:</span>
-                <span>{data.days_requested} days</span>
+                <span>{data.days_requested === 0 ? 'All Time' : `${data.days_requested} days`}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[--color-subtle]">Total Headaches:</span>

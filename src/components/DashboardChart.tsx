@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ComposedChart,
   Bar,
@@ -22,6 +22,10 @@ function getLocalDateString(utcTimestamp: string): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function isMedicationEvent(event: { event_type: string }): boolean {
+  return event.event_type.trim().toLowerCase() === "medication";
 }
 
 // Helper function to aggregate data by local date
@@ -54,27 +58,53 @@ function aggregateDataByLocalDate(
 
   // Generate all dates in range using local time
   const result = [];
-  const today = new Date();
-  const startDate = new Date(today);
-  startDate.setDate(today.getDate() - daysRequested + 1); // Include today
+  let startDate: Date;
+  if (daysRequested <= 0) {
+    const stamps = [
+      ...headaches.map((h) => h.timestamp),
+      ...events.map((e) => e.timestamp),
+    ];
+    if (stamps.length === 0) {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+    } else {
+      const earliest = new Date(
+        Math.min(...stamps.map((t) => new Date(t).getTime())),
+      );
+      startDate = new Date(
+        earliest.getFullYear(),
+        earliest.getMonth(),
+        earliest.getDate(),
+      );
+    }
+  } else {
+    startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysRequested + 1); // Include today
+    startDate.setHours(0, 0, 0, 0);
+  }
 
-  for (let d = new Date(startDate); d <= today; d.setDate(d.getDate() + 1)) {
+  const endDay = new Date();
+  endDay.setHours(0, 0, 0, 0);
+
+  for (let d = new Date(startDate); d <= endDay; d.setDate(d.getDate() + 1)) {
     const dateStr = getLocalDateString(d.toISOString());
     const dayHeadaches = headachesByDate[dateStr] || [];
     const dayEvents = eventsByDate[dateStr] || [];
 
     // Calculate stats for this day
     const severities = dayHeadaches.map((h) => h.severity);
-    const minSeverity = severities.length > 0 ? Math.min(...severities) : null;
-    const maxSeverity = severities.length > 0 ? Math.max(...severities) : null;
+    // Use 0 when there are no headaches so Recharts draws continuous lines at the baseline instead of gaps.
+    const minSeverity = severities.length > 0 ? Math.min(...severities) : 0;
+    const maxSeverity = severities.length > 0 ? Math.max(...severities) : 0;
     const avgSeverity =
       severities.length > 0
         ? Math.round(
             (severities.reduce((sum, s) => sum + s, 0) / severities.length) *
               10,
           ) / 10
-        : null;
+        : 0;
     const auraCount = dayHeadaches.filter((h) => h.aura === 1).length;
+    const medicationCount = dayEvents.filter(isMedicationEvent).length;
 
     result.push({
       date: dateStr,
@@ -90,6 +120,7 @@ function aggregateDataByLocalDate(
       aura_count: auraCount,
       has_aura: auraCount > 0,
       events_count: dayEvents.length,
+      medication_count: medicationCount,
       events: dayEvents,
       headaches: dayHeadaches.map((h, idx) => ({
         id: `${dateStr}-${idx}`,
@@ -106,13 +137,15 @@ function aggregateDataByLocalDate(
 interface ChartDataPoint {
   date: string;
   displayDate: string;
-  min_severity: number | null;
-  max_severity: number | null;
-  avg_severity: number | null;
+  min_severity: number;
+  max_severity: number;
+  avg_severity: number;
   headache_count: number;
   aura_count: number;
   has_aura: boolean;
   events_count: number;
+  /** Count of medication-type events that day (blue bars, right axis). */
+  medication_count: number;
   events: Array<{
     event_type: string;
     value: string;
@@ -124,6 +157,26 @@ interface ChartDataPoint {
     severity: number;
     aura: boolean;
   }>;
+}
+
+/** Line points at y=0 for no-headache days; omit visible dots on those days (line still connects). */
+function lineDotSkipZeroHeadacheDays(compact: boolean, fill: string) {
+  return (props: { cx?: number; cy?: number; payload?: ChartDataPoint }) => {
+    const p = props.payload;
+    if (p == null || p.headache_count === 0) {
+      return <g />;
+    }
+    const r = compact ? 2 : 3;
+    return (
+      <circle
+        cx={props.cx}
+        cy={props.cy}
+        r={r}
+        fill={fill}
+        strokeWidth={2}
+      />
+    );
+  };
 }
 
 // Map severity values (0-10) to colors using theme variables
@@ -255,6 +308,12 @@ function CustomTooltip({
           </div>
         )}
 
+        {dayData.medication_count > 0 && (
+          <p className="text-xs font-medium text-[#93c5fd] mt-1">
+            Medication logged: {dayData.medication_count}
+          </p>
+        )}
+
         {dayData.events.length > 0 && (
           <div className="mt-2 pt-2 border-t border-[--color-neon-violet]">
             <p className="text-xs text-[--color-attention] mb-1">
@@ -311,6 +370,12 @@ function CustomTooltip({
           <p className="text-xs text-[--color-subtle]">No headaches</p>
         )}
 
+        {data.medication_count > 0 && (
+          <p className="text-xs font-medium text-[#93c5fd] mt-1">
+            Medication logged: {data.medication_count}
+          </p>
+        )}
+
         {data.events.length > 0 && (
           <div className="mt-2 pt-2 border-t border-[--color-neon-violet]">
             <p className="text-xs text-[--color-attention] mb-1">
@@ -354,7 +419,7 @@ interface DashboardChartProps {
  * - Severity-based color coding (0-3: lime green, 4-6: yellow/orange, 7-8: orange, 9-10: red)
  * - Red dots on bars with aura
  * - Line chart showing daily average severity
- * - Green dots at bottom for days with events
+ * - Blue bars (right axis) for medication count per day; green dots for other events
  * - Interactive tooltips showing individual entry details + daily summary
  */
 export default function DashboardChart({
@@ -400,9 +465,14 @@ export default function DashboardChart({
   
   const barData: BarDataPoint[] = transformDataForBars(chartData);
   const mergedData = mergeBarDataIntoChartData(chartData, barData);
-  
-  // Only show individual bars and aura indicators for short date ranges
-  const showIndividualBars = days < 10;
+
+  const medicationAxisMax = useMemo(() => {
+    const m = chartData.reduce((acc, d) => Math.max(acc, d.medication_count), 0);
+    return Math.max(1, m);
+  }, [chartData]);
+
+  // Only show individual bars for short windows (never for all-time — too many days)
+  const showIndividualBars = days > 0 && days < 10;
 
   if (loading) {
     return (
@@ -443,6 +513,7 @@ export default function DashboardChart({
                   { value: 30, label: "30 days" },
                   { value: 60, label: "60 days" },
                   { value: 90, label: "90 days" },
+                  { value: 0, label: "All Time" },
                 ]}
               />
             </div>
@@ -460,7 +531,12 @@ export default function DashboardChart({
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={mergedData}
-            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+            margin={{
+              top: 20,
+              right: compact ? 34 : 44,
+              left: 12,
+              bottom: 5,
+            }}
           >
             <CartesianGrid
               strokeDasharray="3 3"
@@ -475,17 +551,63 @@ export default function DashboardChart({
               height={60}
             />
             <YAxis
+              yAxisId="severity"
+              orientation="left"
               stroke="var(--color-subtle)"
-              fontSize={compact ? 10 : 12}
+              tick={{ fill: "var(--color-subtle)", fontSize: compact ? 10 : 12 }}
               domain={[0, 10]}
+              label={
+                !compact
+                  ? {
+                      value: "Severity (0–10)",
+                      angle: -90,
+                      position: "insideLeft",
+                      fill: "var(--color-subtle)",
+                      fontSize: 11,
+                    }
+                  : undefined
+              }
+            />
+            <YAxis
+              yAxisId="medication"
+              orientation="right"
+              stroke="#60a5fa"
+              tick={{ fill: "#93c5fd", fontSize: compact ? 9 : 11 }}
+              domain={[0, medicationAxisMax]}
+              allowDecimals={false}
+              width={compact ? 30 : 38}
+              label={
+                !compact
+                  ? {
+                      value: "Medication / day",
+                      angle: 90,
+                      position: "insideRight",
+                      fill: "#93c5fd",
+                      fontSize: 11,
+                    }
+                  : undefined
+              }
             />
             <Tooltip content={<CustomTooltip />} />
             {!compact && <Legend />}
+
+            {/* Medication count per day (right Y axis); drawn under severity lines */}
+            <Bar
+              yAxisId="medication"
+              dataKey="medication_count"
+              name="Medication"
+              fill="#3b82f6"
+              fillOpacity={0.88}
+              barSize={compact ? 7 : 11}
+              radius={[3, 3, 0, 0]}
+              legendType="square"
+            />
 
             {/* Individual headache severity bars - only show for short date ranges */}
             {showIndividualBars && barData.map((entry, index) => (
               <Bar
                 key={`bar-${index}`}
+                yAxisId="severity"
                 dataKey={`headache_${index}`}
                 fill={entry.color}
                 barSize={compact ? 6 : 10}
@@ -496,43 +618,34 @@ export default function DashboardChart({
 
             {/* Min severity line */}
             <Line
+              yAxisId="severity"
               type="monotone"
               dataKey="min_severity"
               stroke="var(--color-neon-lime)"
               strokeWidth={2}
-              dot={{
-                fill: "var(--color-neon-lime)",
-                strokeWidth: 2,
-                r: compact ? 2 : 3,
-              }}
+              dot={lineDotSkipZeroHeadacheDays(compact, "var(--color-neon-lime)")}
               name="Min Severity"
             />
 
             {/* Average line */}
             <Line
+              yAxisId="severity"
               type="monotone"
               dataKey="avg_severity"
               stroke="var(--color-attention)"
               strokeWidth={2}
-              dot={{
-                fill: "var(--color-attention)",
-                strokeWidth: 2,
-                r: compact ? 2 : 3,
-              }}
+              dot={lineDotSkipZeroHeadacheDays(compact, "var(--color-attention)")}
               name="Average Severity"
             />
 
             {/* Max severity line */}
             <Line
+              yAxisId="severity"
               type="monotone"
               dataKey="max_severity"
               stroke="var(--color-alert)"
               strokeWidth={2}
-              dot={{
-                fill: "var(--color-alert)",
-                strokeWidth: 2,
-                r: compact ? 2 : 3,
-              }}
+              dot={lineDotSkipZeroHeadacheDays(compact, "var(--color-alert)")}
               name="Max Severity"
             />
 
@@ -542,6 +655,7 @@ export default function DashboardChart({
               .map((entry) => (
                 <ReferenceDot
                   key={`aura-${entry.id}`}
+                  yAxisId="severity"
                   x={entry.displayDate}
                   y={entry.severity}
                   r={compact ? 4 : 6}
@@ -551,11 +665,12 @@ export default function DashboardChart({
                 />
               ))}
 
-            {/* Event indicators */}
+            {/* Other (non-medication) events — medication shown as blue bars */}
             {chartData.map((entry, index) =>
-              entry.events_count > 0 ? (
+              entry.events.some((e) => !isMedicationEvent(e)) ? (
                 <ReferenceDot
                   key={`events-${index}`}
+                  yAxisId="severity"
                   x={entry.displayDate}
                   y={-0.5}
                   r={compact ? 3 : 4}
@@ -577,8 +692,15 @@ export default function DashboardChart({
               <span>Aura present</span>
             </div>
             <div className="flex items-center gap-2">
+              <div
+                className="h-3 w-3 rounded-sm"
+                style={{ background: "#3b82f6" }}
+              />
+              <span>Medication (bars, right scale)</span>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-[var(--color-neon-lime)]"></div>
-              <span>Events recorded</span>
+              <span>Other events</span>
             </div>
             <div className="flex items-center gap-2">
               <span>Bar color indicates severity (light = low, dark = high)</span>
