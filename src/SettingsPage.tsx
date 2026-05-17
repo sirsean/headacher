@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import type { Identity } from './types'
 import AuthButtons from './components/AuthButtons'
+import { getGoogleHealthAuthorizeUrl, getGoogleHealthStatus } from './api'
 
 export default function SettingsPage() {
-  const { linkWithGoogle, linkWithSiwe, isAuthenticated, identities: cachedIdentities, refreshIdentities } = useAuth()
+  const { linkWithGoogle, linkWithSiwe, isAuthenticated, identities: cachedIdentities, refreshIdentities, fetchWithAuth } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [identities, setIdentities] = useState<Identity[]>(cachedIdentities ?? [])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [linking, setLinking] = useState<'google' | 'siwe' | null>(null)
+  const [ghStatus, setGhStatus] = useState<{ connected: boolean; lastSyncAt: string | null; lastError: string | null } | null>(null)
+  const [ghLoading, setGhLoading] = useState(false)
+  const [ghLinking, setGhLinking] = useState(false)
+  const [ghBanner, setGhBanner] = useState<string | null>(null)
 
   // Hooks must be called unconditionally. Only perform work inside the effect based on auth.
   useEffect(() => {
@@ -31,6 +38,41 @@ export default function SettingsPage() {
     return () => { mounted = false }
   }, [isAuthenticated, refreshIdentities, cachedIdentities])
 
+  const hasGoogleIdentity = identities.some((i) => i.provider === 'GOOGLE')
+
+  useEffect(() => {
+    const g = searchParams.get('google_health')
+    if (!g) return
+    if (g === 'connected') {
+      setGhBanner('Google Health connected. HRV will sync on the hourly schedule (and was queued in the background).')
+    } else if (g === 'error') {
+      const reason = searchParams.get('reason') ?? 'unknown'
+      setGhBanner(`Google Health connection failed (${reason}). Try again or check server OAuth configuration.`)
+    }
+    setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  useEffect(() => {
+    if (!isAuthenticated || loading || !hasGoogleIdentity) {
+      setGhStatus(null)
+      return
+    }
+    let mounted = true
+    const loadGh = async () => {
+      setGhLoading(true)
+      try {
+        const s = await getGoogleHealthStatus(fetchWithAuth)
+        if (mounted) setGhStatus(s)
+      } catch {
+        if (mounted) setGhStatus(null)
+      } finally {
+        if (mounted) setGhLoading(false)
+      }
+    }
+    void loadGh()
+    return () => { mounted = false }
+  }, [isAuthenticated, loading, hasGoogleIdentity, fetchWithAuth])
+
   if (!isAuthenticated) {
     return (
       <div className="panel space-y-4">
@@ -45,6 +87,18 @@ export default function SettingsPage() {
 
   const hasGoogle = identities.some(i => i.provider === 'GOOGLE')
   const hasSiwe = identities.some(i => i.provider === 'SIWE')
+
+  const onConnectGoogleHealth = async () => {
+    setGhLinking(true)
+    setError(null)
+    try {
+      const { authorizeUrl } = await getGoogleHealthAuthorizeUrl(fetchWithAuth)
+      window.location.assign(authorizeUrl)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to start Google Health connection')
+      setGhLinking(false)
+    }
+  }
 
   const onLinkGoogle = async () => {
     setLinking('google')
@@ -84,6 +138,11 @@ export default function SettingsPage() {
         <p className="text-red-500 text-sm">{error}</p>
       ) : (
         <div className="space-y-4">
+          {ghBanner && (
+            <p className="text-sm text-[--color-neon-cyan] border border-[--color-neon-violet] rounded-md px-3 py-2">
+              {ghBanner}
+            </p>
+          )}
           <div>
             <h3 className="font-display text-lg mb-2">Linked identities</h3>
             <ul className="space-y-2">
@@ -103,6 +162,49 @@ export default function SettingsPage() {
                 </li>
               ))}
             </ul>
+          </div>
+
+          <div className="border-t border-[--color-border] pt-4">
+            <h3 className="font-display text-lg mb-2">Google Health (daily HRV)</h3>
+            {!hasGoogle ? (
+              <p className="text-[--color-subtle] text-sm">
+                Link a Google account above first. Google Health data is tied to the same Google account as your Firebase sign-in.
+              </p>
+            ) : ghLoading ? (
+              <p className="text-[--color-subtle] text-sm">Checking Google Health connection…</p>
+            ) : ghStatus?.connected ? (
+              <div className="text-sm space-y-1">
+                <p className="text-[--color-neon-lime]">Connected to Google Health.</p>
+                {ghStatus.lastSyncAt && (
+                  <p className="text-[--color-subtle]">Last sync: {new Date(ghStatus.lastSyncAt).toLocaleString()}</p>
+                )}
+                {ghStatus.lastError && (
+                  <p className="text-amber-400 text-xs">Last error: {ghStatus.lastError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={onConnectGoogleHealth}
+                  disabled={ghLinking}
+                  className="mt-2 px-3 py-2 bg-[#7c3aed] text-white rounded-md hover:bg-[#6d28d9] disabled:opacity-50 text-sm"
+                >
+                  {ghLinking ? 'Redirecting…' : 'Reconnect Google Health'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[--color-subtle] text-sm">
+                  Connect to pull daily HRV from Google Health into your dashboard charts. You will be asked to grant read access to health metrics; refresh tokens stay on the server.
+                </p>
+                <button
+                  type="button"
+                  onClick={onConnectGoogleHealth}
+                  disabled={ghLinking}
+                  className="px-3 py-2 bg-[#7c3aed] text-white rounded-md hover:bg-[#6d28d9] disabled:opacity-50 text-sm"
+                >
+                  {ghLinking ? 'Redirecting…' : 'Connect Google Health'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="border-t border-[--color-border] pt-4">

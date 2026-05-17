@@ -3,6 +3,30 @@ import { cors } from 'hono/cors';
 import { validateTimestamp, isInt, toISO, dbAll, dbFirst, dbRun, mapHeadache, mapEvent, HttpError, corsHeaders, requireAuthentication, getJwtSecretKey } from "./utils";
 import { upsertUserForSiwe, upsertUserForGoogle, linkSiweToUser, linkGoogleToUser, getUserIdentities } from "./services/identity-service";
 import { verifyFirebaseIdToken } from "./services/firebase-auth";
+import {
+  getGoogleIdentityEmail,
+  hasGoogleIdentity,
+  upsertGoogleHealthOauth,
+  listHrvDailyForUser,
+  getGoogleHealthStatus,
+} from "./services/google-health-db";
+import {
+  buildAuthorizeUrl,
+  createPkcePair,
+  exchangeAuthorizationCode,
+  parseIdTokenEmail,
+  signOAuthState,
+  verifyOAuthState,
+  GOOGLE_HEALTH_SCOPES,
+  REQUIRED_HRV_API_SCOPE,
+  fetchGoogleTokenInfo,
+  missingHrvApiScopes,
+  parseScopeString,
+  refreshAccessToken,
+  type GoogleOauthEnv,
+} from "./services/google-health-oauth";
+import { decryptSecret, encryptSecret } from "./services/token-crypto";
+import { syncGoogleHealthForUser, type HeadacherBindings } from "./services/google-health-sync";
 import type { EventItem, Headache } from "../src/types";
 import { generateNonce, SiweMessage } from "siwe";
 import { SignJWT } from "jose";
@@ -12,6 +36,12 @@ interface Env {
   ASSETS: Fetcher;
   JWT_SECRET_KEY: string;
   FIREBASE_PROJECT_ID: string;
+  /** GCP project with Google Health API enabled (not necessarily the Firebase project). */
+  GOOGLE_HEALTH_PROJECT_ID?: string;
+  GOOGLE_OAUTH_CLIENT_ID?: string;
+  GOOGLE_OAUTH_CLIENT_SECRET?: string;
+  GOOGLE_OAUTH_REDIRECT_URI?: string;
+  GOOGLE_TOKEN_ENCRYPTION_KEY?: string;
 }
 
 // Helper function to read JSON from request
@@ -24,6 +54,17 @@ async function readJson<T = Record<string, unknown>>(request: Request): Promise<
 }
 
 // Note: requireAuth function is now imported from utils.ts and works with Hono Context
+
+function googleHealthConfigured(
+  env: Env,
+): env is Env & GoogleOauthEnv & { GOOGLE_HEALTH_PROJECT_ID: string } {
+  return Boolean(
+    env.GOOGLE_HEALTH_PROJECT_ID &&
+      env.GOOGLE_OAUTH_CLIENT_ID &&
+      env.GOOGLE_OAUTH_CLIENT_SECRET &&
+      env.GOOGLE_OAUTH_REDIRECT_URI,
+  );
+}
 
 
 // Create the Hono app with proper type definition for Variables
@@ -51,6 +92,10 @@ app.use('/api/headaches', requireAuthentication);
 app.use('/api/headaches/*', requireAuthentication);
 app.use('/api/events', requireAuthentication);
 app.use('/api/events/*', requireAuthentication);
+app.use('/api/hrv', requireAuthentication);
+app.use('/api/integrations/google-health/status', requireAuthentication);
+app.use('/api/integrations/google-health/diagnostics', requireAuthentication);
+app.use('/api/integrations/google-health/authorize', requireAuthentication);
 
 // Error handler - wraps all thrown errors in existing utils.error() JSON shape, preserving HttpError logic
 app.onError((err, c) => {
@@ -288,6 +333,211 @@ app.post('/api/auth/logout', (c) => {
   return c.json({ success: true, message: "Logged out successfully" });
 });
 
+// Google Health: OAuth + status (refresh token stored server-side; see plans/HRV_TRACKING.md)
+app.get('/api/integrations/google-health/status', async (c) => {
+  const userId = c.get('userId');
+  const s = await getGoogleHealthStatus(c.env.DB, userId);
+  return c.json({
+    connected: s.connected,
+    lastSyncAt: s.lastSyncAt,
+    lastError: s.lastError,
+    requiredScopeForHrv: REQUIRED_HRV_API_SCOPE,
+    requestedScopes: GOOGLE_HEALTH_SCOPES.split(" "),
+  });
+});
+
+/** Dev helper: compare requested vs granted OAuth scopes on the live refresh token. */
+app.get('/api/integrations/google-health/diagnostics', async (c) => {
+  const userId = c.get('userId');
+  const row = await c.env.DB.prepare(
+    "SELECT scope, google_email, last_sync_at, last_error FROM google_health_oauth WHERE user_id = ?",
+  )
+    .bind(userId)
+    .first<{ scope: string; google_email: string; last_sync_at: string | null; last_error: string | null }>();
+
+  if (!row) {
+    return c.json({
+      connected: false,
+      requestedScopes: GOOGLE_HEALTH_SCOPES.split(" "),
+      requiredScopeForHrv: REQUIRED_HRV_API_SCOPE,
+      hint: "Not connected. After connecting, call this again to see granted scopes.",
+    });
+  }
+
+  if (!googleHealthConfigured(c.env)) {
+    return c.json({ error: { status: 503, message: "Google Health not configured on server", details: null } }, 503);
+  }
+
+  const storedScopes = parseScopeString(row.scope);
+  let refreshScopes: string[] = [];
+  let tokenInfoScopes: string[] = [];
+  let refreshError: string | null = null;
+
+  try {
+    const oauthRow = await c.env.DB.prepare(
+      "SELECT refresh_token_ciphertext FROM google_health_oauth WHERE user_id = ?",
+    )
+      .bind(userId)
+      .first<{ refresh_token_ciphertext: string }>();
+    if (oauthRow?.refresh_token_ciphertext) {
+      const refreshPlain = await decryptSecret(oauthRow.refresh_token_ciphertext, c.env);
+      const tok = await refreshAccessToken(c.env, refreshPlain);
+      refreshScopes = parseScopeString(tok.scope);
+      if (tok.access_token) {
+        const info = await fetchGoogleTokenInfo(tok.access_token);
+        tokenInfoScopes = parseScopeString(info.scope);
+        if (info.error) refreshError = info.error_description ?? info.error;
+      }
+    }
+  } catch (e) {
+    refreshError = e instanceof Error ? e.message : String(e);
+  }
+
+  const effective = refreshScopes.length > 0 ? refreshScopes : tokenInfoScopes;
+  const missing = missingHrvApiScopes(effective);
+
+  return c.json({
+    connected: true,
+    googleEmail: row.google_email,
+    lastSyncAt: row.last_sync_at,
+    lastError: row.last_error,
+    requestedScopes: GOOGLE_HEALTH_SCOPES.split(" "),
+    storedScopesAtConnect: storedScopes,
+    scopesFromRefreshResponse: refreshScopes,
+    scopesFromTokenInfo: tokenInfoScopes,
+    missingScopesForHrvApi: missing,
+    requiredScopeForHrv: REQUIRED_HRV_API_SCOPE,
+    refreshError,
+    fixIfMissingScopes:
+      missing.length > 0
+        ? "In the Health GCP project: APIs & Services → OAuth consent screen → Data access → add Google Health API scope health_metrics_and_measurements.readonly, Save, then Reconnect Google Health in Settings (prompt=consent)."
+        : null,
+  });
+});
+
+app.get('/api/integrations/google-health/authorize', async (c) => {
+  if (!googleHealthConfigured(c.env)) {
+    return c.json(
+      {
+        error: {
+          status: 503,
+          message: 'Google Health is not configured (set GOOGLE_HEALTH_PROJECT_ID and OAuth vars)',
+          details: null,
+        },
+      },
+      503,
+    );
+  }
+  const userId = c.get('userId');
+  if (!(await hasGoogleIdentity(c.env.DB, userId))) {
+    return c.json(
+      {
+        error: {
+          status: 403,
+          message: 'Link a Google account in Settings before connecting Google Health',
+          details: null,
+        },
+      },
+      403,
+    );
+  }
+  const { verifier, challenge } = await createPkcePair();
+  const state = await signOAuthState(c.env, userId, verifier);
+  const { authorizeUrl } = buildAuthorizeUrl(c.env, state, challenge);
+  return c.json({ authorizeUrl });
+});
+
+app.get('/api/integrations/google-health/callback', async (c) => {
+  const url = new URL(c.req.url);
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  const oauthErr = url.searchParams.get('error');
+  const origin = url.origin;
+  const redir = (params: Record<string, string>) => {
+    const u = new URL('/settings', origin);
+    for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+    return c.redirect(u.toString());
+  };
+  if (oauthErr) return redir({ google_health: 'error', reason: oauthErr });
+  if (!code || !state) return redir({ google_health: 'error', reason: 'missing_code_or_state' });
+  if (!googleHealthConfigured(c.env)) return redir({ google_health: 'error', reason: 'not_configured' });
+
+  let userId: string;
+  let codeVerifier: string;
+  try {
+    const v = await verifyOAuthState(c.env, state);
+    userId = v.userId;
+    codeVerifier = v.codeVerifier;
+  } catch {
+    return redir({ google_health: 'error', reason: 'invalid_state' });
+  }
+
+  let tokens: Awaited<ReturnType<typeof exchangeAuthorizationCode>>;
+  try {
+    tokens = await exchangeAuthorizationCode(c.env, code, codeVerifier);
+  } catch {
+    return redir({ google_health: 'error', reason: 'token_exchange_failed' });
+  }
+  if (!tokens.refresh_token) {
+    return redir({ google_health: 'error', reason: 'missing_refresh_token' });
+  }
+
+  const idEmail = parseIdTokenEmail(tokens.id_token);
+  if (!idEmail?.email) {
+    return redir({ google_health: 'error', reason: 'missing_email_claim' });
+  }
+  if (!idEmail.emailVerified) {
+    return redir({ google_health: 'error', reason: 'email_not_verified' });
+  }
+
+  const expected = await getGoogleIdentityEmail(c.env.DB, userId);
+  if (expected && idEmail.email.toLowerCase() !== expected.toLowerCase()) {
+    return redir({ google_health: 'error', reason: 'email_mismatch' });
+  }
+  if (!expected) {
+    const has = await hasGoogleIdentity(c.env.DB, userId);
+    if (!has) return redir({ google_health: 'error', reason: 'no_google_identity' });
+  }
+
+  const grantedScopeStr = tokens.scope ?? "";
+  const grantedList = parseScopeString(grantedScopeStr);
+  const missingAtConnect = missingHrvApiScopes(grantedList);
+  if (missingAtConnect.length > 0) {
+    console.error("google_health_callback_insufficient_scopes", {
+      requested: GOOGLE_HEALTH_SCOPES,
+      granted: grantedScopeStr,
+      missing: missingAtConnect,
+    });
+    return redir({
+      google_health: "error",
+      reason: "insufficient_scopes_granted",
+      missing: missingAtConnect.join(","),
+    });
+  }
+
+  try {
+    const enc = await encryptSecret(tokens.refresh_token, c.env);
+    await upsertGoogleHealthOauth(
+      c.env.DB,
+      userId,
+      enc,
+      idEmail.email,
+      grantedScopeStr || GOOGLE_HEALTH_SCOPES,
+    );
+  } catch (e) {
+    console.error('google_health_callback_store', e);
+    return redir({ google_health: 'error', reason: 'store_failed' });
+  }
+
+  c.executionCtx.waitUntil(
+    syncGoogleHealthForUser(c.env as HeadacherBindings, userId).catch((err) =>
+      console.error('google_health_initial_sync', err),
+    ),
+  );
+
+  return redir({ google_health: 'connected' });
+});
+
 // Dashboard data (days=0 means all time for this user)
 app.get('/api/dashboard', async (c) => {
   const userId = c.get('userId');
@@ -388,13 +638,55 @@ app.get('/api/dashboard', async (c) => {
       ? allTimestamps.reduce((a, b) => (a < b ? a : b)).split('T')[0]
       : endISO.split('T')[0];
 
+  let hrv: Array<{ civil_date: string; daily_rmssd_ms: number | null; deep_rmssd_ms: number | null }>;
+  if (allTime) {
+    hrv = await listHrvDailyForUser(c.env.DB, userId, null, null);
+  } else {
+    const startDateForRange = new Date();
+    startDateForRange.setDate(endDate.getDate() - days);
+    const startYmd = startDateForRange.toISOString().slice(0, 10);
+    const endYmd = endISO.slice(0, 10);
+    hrv = await listHrvDailyForUser(c.env.DB, userId, startYmd, endYmd);
+  }
+
   return c.json({
     days_requested: allTime ? 0 : days,
     start_date: startDateStr,
     end_date: endISO.split('T')[0],
     headaches,
-    events
+    events,
+    hrv,
   });
+});
+
+function isCivilDateYmd(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+app.get('/api/hrv', async (c) => {
+  const userId = c.get('userId');
+  const from = c.req.query('from');
+  const to = c.req.query('to');
+  const limitParam = c.req.query('limit');
+
+  let startYmd: string | null = null;
+  let endYmd: string | null = null;
+  if (from && isCivilDateYmd(from)) startYmd = from;
+  if (to && isCivilDateYmd(to)) endYmd = to;
+  if (startYmd && !endYmd) endYmd = startYmd;
+  if (endYmd && !startYmd) startYmd = endYmd;
+
+  let limit = 200;
+  if (limitParam) {
+    const n = Number(limitParam);
+    if (Number.isFinite(n)) limit = Math.max(1, Math.min(500, Math.trunc(n)));
+  }
+
+  const items = await listHrvDailyForUser(c.env.DB, userId, startYmd, endYmd, {
+    order: 'desc',
+    limit,
+  });
+  return c.json({ items });
 });
 
 // Headache collection - GET and POST

@@ -143,10 +143,55 @@ export interface DashboardData {
     value: string
     timestamp: string
   }>
+  /** Daily RMSSD (ms) from Google Health, keyed by API civil date (YYYY-MM-DD). */
+  hrv: Array<{
+    civil_date: string
+    daily_rmssd_ms: number | null
+    deep_rmssd_ms: number | null
+  }>
+}
+
+export async function getGoogleHealthStatus(
+  fetchWithAuth?: AuthenticatedFetch,
+): Promise<{ connected: boolean; lastSyncAt: string | null; lastError: string | null }> {
+  const fetchFn = fetchWithAuth || fetch
+  const res = await fetchFn(`${API_BASE}/api/integrations/google-health/status`)
+  return handleJson(res)
+}
+
+export async function getGoogleHealthAuthorizeUrl(fetchWithAuth?: AuthenticatedFetch): Promise<{ authorizeUrl: string }> {
+  const fetchFn = fetchWithAuth || fetch
+  const res = await fetchFn(`${API_BASE}/api/integrations/google-health/authorize`)
+  return handleJson(res)
 }
 
 export async function getDashboardData(days: number = 30, fetchWithAuth?: AuthenticatedFetch): Promise<DashboardData> {
   const fetchFn = fetchWithAuth || fetch
   const res = await fetchFn(`${API_BASE}/api/dashboard?days=${days}`)
+  return handleJson(res)
+}
+
+export interface HrvDaily {
+  civil_date: string
+  daily_rmssd_ms: number | null
+  deep_rmssd_ms: number | null
+}
+
+export interface ListHrvParams {
+  from?: string
+  to?: string
+  limit?: number
+}
+
+export async function listHrv(
+  params: ListHrvParams = {},
+  fetchWithAuth?: AuthenticatedFetch,
+): Promise<{ items: HrvDaily[] }> {
+  const u = new URL('/api/hrv', window.location.origin)
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') u.searchParams.set(k, String(v))
+  })
+  const fetchFn = fetchWithAuth || fetch
+  const res = await fetchFn(u.toString())
   return handleJson(res)
 }

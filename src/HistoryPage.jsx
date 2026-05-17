@@ -32,6 +32,20 @@ function getTodayAsYyyyMmDd() {
   return new Date().toLocaleDateString("sv-SE");
 }
 
+function formatCivilDate(ymd) {
+  return new Date(`${ymd}T12:00:00`).toLocaleDateString("en-US", {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatHrvMs(value) {
+  if (value == null || value <= 0) return "—";
+  return `${Math.round(value)}`;
+}
+
 export default function HistoryPage() {
   const { isAuthenticated } = useAuth();
 
@@ -57,10 +71,18 @@ export default function HistoryPage() {
     () => ({ ...dateRange, limit: 50 }),
     [dateRange],
   );
+  const hrvParams = useMemo(
+    () =>
+      selectedDate
+        ? { from: selectedDate, to: selectedDate, limit: 50 }
+        : { limit: 200 },
+    [selectedDate],
+  );
 
   const {
     headaches,
     events,
+    hrv,
     loading,
     error,
     setHeadaches,
@@ -69,6 +91,7 @@ export default function HistoryPage() {
   } = useHeadacheEntries({
     headachesParams,
     eventsParams,
+    hrvParams,
   });
   const { removeHeadache, removeEvent } = useMutations();
 
@@ -96,7 +119,7 @@ export default function HistoryPage() {
           <h3 className="font-display text-lg mb-3 text-[--color-attention]">
             What You'll Find:
           </h3>
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-3 gap-6">
             <div>
               <h4 className="font-display text-base mb-2 text-[--color-neon-cyan]">
                 Headache History
@@ -118,6 +141,16 @@ export default function HistoryPage() {
                 <li>• Categorized by event type</li>
                 <li>• Searchable and filterable</li>
                 <li>• Full edit and management tools</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-display text-base mb-2 text-[#c084fc]">
+                HRV
+              </h4>
+              <ul className="space-y-1 text-sm text-[--color-subtle]">
+                <li>• Daily heart rate variability</li>
+                <li>• Synced from Google Health</li>
+                <li>• Filtered by date like headaches</li>
               </ul>
             </div>
           </div>
@@ -274,6 +307,48 @@ export default function HistoryPage() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="panel">
+        <h2 className="font-display text-xl text-[#c084fc] mb-3">HRV</h2>
+        <p className="text-xs text-[--color-subtle] mb-3">
+          Daily values from Google Health (ms). Connect Google Health in Settings to sync.
+        </p>
+        {hrv.length === 0 ? (
+          <p className="text-sm text-[--color-subtle]">
+            {selectedDate
+              ? "No HRV data for this date."
+              : "No HRV data yet."}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-[--color-subtle] border-b border-[color:color-mix(in_oklch,var(--color-neon-violet)_18%,transparent)]">
+                  <th className="py-2 pr-4 font-normal">Date</th>
+                  <th className="py-2 px-4 font-normal text-right">HRV (ms)</th>
+                  <th className="py-2 pl-4 font-normal text-right">Deep sleep (ms)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[color:color-mix(in_oklch,var(--color-neon-violet)_18%,transparent)]">
+                {hrv.map((row) => (
+                  <tr key={row.civil_date}>
+                    <td className="py-2 pr-4">{formatCivilDate(row.civil_date)}</td>
+                    <td
+                      className="py-2 px-4 text-right font-mono tabular-nums"
+                      style={{ color: "#c084fc" }}
+                    >
+                      {formatHrvMs(row.daily_rmssd_ms)}
+                    </td>
+                    <td className="py-2 pl-4 text-right font-mono tabular-nums text-[--color-subtle]">
+                      {formatHrvMs(row.deep_rmssd_ms)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

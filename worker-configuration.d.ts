@@ -6,6 +6,13 @@ declare namespace Cloudflare {
 		DB: D1Database;
 		JWT_SECRET_KEY: string;
 		ASSETS: Fetcher;
+		FIREBASE_PROJECT_ID: string;
+		/** GCP project where Google Health API + OAuth client live (separate from Firebase). */
+		GOOGLE_HEALTH_PROJECT_ID?: string;
+		GOOGLE_OAUTH_CLIENT_ID?: string;
+		GOOGLE_OAUTH_CLIENT_SECRET?: string;
+		GOOGLE_OAUTH_REDIRECT_URI?: string;
+		GOOGLE_TOKEN_ENCRYPTION_KEY?: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

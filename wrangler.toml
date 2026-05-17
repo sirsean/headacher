@@ -18,6 +18,13 @@ preview_database_id = "headacher"
 [vars]
 # JWT_SECRET_KEY = "your-development-jwt-secret-key-here-replace-with-proper-secret"
 FIREBASE_PROJECT_ID = "headacher-c4d8d"
+# Google Health OAuth (also set GOOGLE_OAUTH_CLIENT_SECRET via wrangler secret put)
+GOOGLE_HEALTH_PROJECT_ID = "gen-lang-client-0191948102"
+GOOGLE_OAUTH_CLIENT_ID = "735550244008-4m6bodtn39mk3b06c3h75ea2olitq74b.apps.googleusercontent.com"
+GOOGLE_OAUTH_REDIRECT_URI = "https://headacher.sirsean.me/api/integrations/google-health/callback"
+
+[triggers]
+crons = ["0 * * * *"]
 
 [[routes]]
 pattern = "headacher.sirsean.me"

@@ -139,6 +139,14 @@ interface DbRow {
   email?: string;
   display_name?: string;
   created_at?: string;
+  civil_date?: string;
+  daily_rmssd_ms?: number | null;
+  deep_rmssd_ms?: number | null;
+  last_sync_at?: string | null;
+  last_error?: string | null;
+  refresh_token_ciphertext?: string;
+  google_email?: string;
+  scope?: string;
 }
 
 export function mapHeadache(row: DbRow): Headache {

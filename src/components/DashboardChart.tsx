@@ -33,7 +33,11 @@ function aggregateDataByLocalDate(
   headaches: DashboardData["headaches"],
   events: DashboardData["events"],
   daysRequested: number,
+  hrv: DashboardData["hrv"],
 ) {
+  const hrvMsByDate = new Map(
+    (hrv ?? []).map((row) => [row.civil_date, row.daily_rmssd_ms] as const),
+  );
   // Group headaches by local date
   const headachesByDate = headaches.reduce(
     (acc, headache) => {
@@ -63,6 +67,9 @@ function aggregateDataByLocalDate(
     const stamps = [
       ...headaches.map((h) => h.timestamp),
       ...events.map((e) => e.timestamp),
+      ...(hrv ?? [])
+        .filter((row) => row.civil_date)
+        .map((row) => `${row.civil_date}T12:00:00.000Z`),
     ];
     if (stamps.length === 0) {
       startDate = new Date();
@@ -105,6 +112,11 @@ function aggregateDataByLocalDate(
         : 0;
     const auraCount = dayHeadaches.filter((h) => h.aura === 1).length;
     const medicationCount = dayEvents.filter(isMedicationEvent).length;
+    const rawHrv = hrvMsByDate.get(dateStr);
+    const hrvRmssdMs =
+      rawHrv != null && typeof rawHrv === "number" && Number.isFinite(rawHrv) && rawHrv > 0
+        ? rawHrv
+        : null;
 
     result.push({
       date: dateStr,
@@ -128,6 +140,7 @@ function aggregateDataByLocalDate(
         severity: h.severity,
         aura: h.aura === 1,
       })),
+      hrv_rmssd_ms: hrvRmssdMs,
     });
   }
 
@@ -157,6 +170,8 @@ interface ChartDataPoint {
     severity: number;
     aura: boolean;
   }>;
+  /** Daily RMSSD from Google Health (ms), matched by civil date; null when absent. */
+  hrv_rmssd_ms: number | null;
 }
 
 /** Line points at y=0 for no-headache days; omit visible dots on those days (line still connects). */
@@ -314,6 +329,12 @@ function CustomTooltip({
           </p>
         )}
 
+        {dayData.hrv_rmssd_ms != null && dayData.hrv_rmssd_ms > 0 && (
+          <p className="text-xs font-medium text-[#d8b4fe] mt-1">
+            HRV: {Math.round(dayData.hrv_rmssd_ms)} ms
+          </p>
+        )}
+
         {dayData.events.length > 0 && (
           <div className="mt-2 pt-2 border-t border-[--color-neon-violet]">
             <p className="text-xs text-[--color-attention] mb-1">
@@ -373,6 +394,12 @@ function CustomTooltip({
         {data.medication_count > 0 && (
           <p className="text-xs font-medium text-[#93c5fd] mt-1">
             Medication logged: {data.medication_count}
+          </p>
+        )}
+
+        {data.hrv_rmssd_ms != null && data.hrv_rmssd_ms > 0 && (
+          <p className="text-xs font-medium text-[#d8b4fe] mt-1">
+            HRV: {Math.round(data.hrv_rmssd_ms)} ms
           </p>
         )}
 
@@ -460,7 +487,7 @@ export default function DashboardChart({
   }, [days, refreshTrigger, loadData]);
 
   const chartData: ChartDataPoint[] = data
-    ? aggregateDataByLocalDate(data.headaches, data.events, data.days_requested)
+    ? aggregateDataByLocalDate(data.headaches, data.events, data.days_requested, data.hrv ?? [])
     : [];
   
   const barData: BarDataPoint[] = transformDataForBars(chartData);
@@ -469,6 +496,16 @@ export default function DashboardChart({
   const medicationAxisMax = useMemo(() => {
     const m = chartData.reduce((acc, d) => Math.max(acc, d.medication_count), 0);
     return Math.max(1, m);
+  }, [chartData]);
+
+  const hasHrvChart = useMemo(
+    () => chartData.some((d) => d.hrv_rmssd_ms != null && d.hrv_rmssd_ms > 0),
+    [chartData],
+  );
+
+  const hrvAxisMax = useMemo(() => {
+    const m = chartData.reduce((acc, d) => Math.max(acc, d.hrv_rmssd_ms ?? 0), 0);
+    return Math.max(50, Math.ceil(m * 1.1));
   }, [chartData]);
 
   // Only show individual bars for short windows (never for all-time — too many days)
@@ -533,7 +570,7 @@ export default function DashboardChart({
             data={mergedData}
             margin={{
               top: 20,
-              right: compact ? 34 : 44,
+              right: compact ? (hasHrvChart ? 58 : 34) : (hasHrvChart ? 76 : 44),
               left: 12,
               bottom: 5,
             }}
@@ -588,6 +625,28 @@ export default function DashboardChart({
                   : undefined
               }
             />
+            {hasHrvChart && (
+              <YAxis
+                yAxisId="hrvRmssd"
+                orientation="right"
+                stroke="#c084fc"
+                tick={{ fill: "#d8b4fe", fontSize: compact ? 8 : 10 }}
+                domain={[0, hrvAxisMax]}
+                width={compact ? 26 : 32}
+                offset={compact ? 26 : 34}
+                label={
+                  !compact
+                    ? {
+                        value: "HRV (ms)",
+                        angle: 90,
+                        position: "insideRight",
+                        fill: "#d8b4fe",
+                        fontSize: 10,
+                      }
+                    : undefined
+                }
+              />
+            )}
             <Tooltip content={<CustomTooltip />} />
             {!compact && <Legend />}
 
@@ -649,6 +708,19 @@ export default function DashboardChart({
               name="Max Severity"
             />
 
+            {hasHrvChart && (
+              <Line
+                yAxisId="hrvRmssd"
+                type="monotone"
+                dataKey="hrv_rmssd_ms"
+                stroke="#c084fc"
+                strokeWidth={2}
+                dot={{ r: compact ? 2 : 3, fill: "#c084fc" }}
+                connectNulls={false}
+                name="HRV (ms)"
+              />
+            )}
+
             {/* Aura indicators on individual bars - only show when bars are visible */}
             {showIndividualBars && barData
               .filter((entry) => entry.aura)
@@ -702,6 +774,12 @@ export default function DashboardChart({
               <div className="w-3 h-3 rounded-full bg-[var(--color-neon-lime)]"></div>
               <span>Other events</span>
             </div>
+            {hasHrvChart && (
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-[#c084fc]" />
+                <span>HRV (purple line, right scale)</span>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <span>Bar color indicates severity (light = low, dark = high)</span>
             </div>
