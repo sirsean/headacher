@@ -475,8 +475,17 @@ app.get('/api/integrations/google-health/callback', async (c) => {
   let tokens: Awaited<ReturnType<typeof exchangeAuthorizationCode>>;
   try {
     tokens = await exchangeAuthorizationCode(c.env, code, codeVerifier);
-  } catch {
-    return redir({ google_health: 'error', reason: 'token_exchange_failed' });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("google_health_callback_token_exchange", { message: msg });
+    const knownCodes = [
+      "redirect_uri_mismatch",
+      "invalid_client",
+      "invalid_grant",
+      "unauthorized_client",
+    ] as const;
+    const detail = knownCodes.find((c) => msg.includes(c)) ?? "unknown";
+    return redir({ google_health: "error", reason: "token_exchange_failed", detail });
   }
   if (!tokens.refresh_token) {
     return redir({ google_health: 'error', reason: 'missing_refresh_token' });

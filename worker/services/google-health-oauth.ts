@@ -151,7 +151,15 @@ export async function exchangeAuthorizationCode(
   });
   const json = (await res.json()) as TokenEndpointResponse;
   if (!res.ok) {
-    throw new Error(json.error_description || json.error || `token_exchange_failed_${res.status}`);
+    console.error("google_oauth_token_exchange_failed", {
+      status: res.status,
+      error: json.error,
+      error_description: json.error_description,
+      redirect_uri: env.GOOGLE_OAUTH_REDIRECT_URI,
+      client_id_suffix: env.GOOGLE_OAUTH_CLIENT_ID.slice(-12),
+    });
+    const code = json.error || `http_${res.status}`;
+    throw new Error(json.error_description ? `${code}: ${json.error_description}` : code);
   }
   return json;
 }

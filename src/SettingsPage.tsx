@@ -47,7 +47,16 @@ export default function SettingsPage() {
       setGhBanner('Google Health connected. HRV will sync on the hourly schedule (and was queued in the background).')
     } else if (g === 'error') {
       const reason = searchParams.get('reason') ?? 'unknown'
-      setGhBanner(`Google Health connection failed (${reason}). Try again or check server OAuth configuration.`)
+      const detail = searchParams.get('detail')
+      const hint =
+        reason === 'token_exchange_failed' && detail === 'redirect_uri_mismatch'
+          ? ' Add this exact redirect URI in the Health GCP OAuth client: https://headacher.sirsean.me/api/integrations/google-health/callback'
+          : reason === 'token_exchange_failed' && detail === 'invalid_client'
+            ? ' Check GOOGLE_OAUTH_CLIENT_SECRET on the production Worker matches the client ID in wrangler.toml.'
+            : ''
+      setGhBanner(
+        `Google Health connection failed (${reason}${detail ? `: ${detail}` : ''}).${hint} Try again or check server OAuth configuration.`,
+      )
     }
     setSearchParams({}, { replace: true })
   }, [searchParams, setSearchParams])
