@@ -121,7 +121,7 @@ export function isInt(n: unknown): n is number {
 }
 
 // Typed row mappers
-interface DbRow {
+export interface DbRow {
   id?: number;
   timestamp: string;
   severity?: number;

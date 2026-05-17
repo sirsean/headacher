@@ -1,4 +1,4 @@
-import { dbAll, dbFirst, dbRun } from "../utils";
+import { dbAll, dbFirst, dbRun, type DbRow } from "../utils";
 
 export interface GoogleHealthOauthRow {
   user_id: string;
@@ -128,7 +128,7 @@ export interface ListHrvDailyOptions {
   limit?: number;
 }
 
-function mapHrvDailyRow(r: Record<string, unknown>): HrvDailyRow {
+function mapHrvDailyRow(r: DbRow): HrvDailyRow {
   return {
     civil_date: String(r.civil_date),
     daily_rmssd_ms: r.daily_rmssd_ms == null ? null : Number(r.daily_rmssd_ms),
