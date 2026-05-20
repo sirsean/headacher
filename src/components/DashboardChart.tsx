@@ -554,12 +554,6 @@ export default function DashboardChart({
                 ]}
               />
             </div>
-            <button
-              onClick={loadData}
-              className="btn-ghost text-sm hover:text-[--color-neon-cyan] transition-colors"
-            >
-              ↻ Refresh
-            </button>
           </div>
         )}
       </div>
@@ -675,17 +669,6 @@ export default function DashboardChart({
               />
             ))}
 
-            {/* Min severity line */}
-            <Line
-              yAxisId="severity"
-              type="monotone"
-              dataKey="min_severity"
-              stroke="var(--color-neon-lime)"
-              strokeWidth={2}
-              dot={lineDotSkipZeroHeadacheDays(compact, "var(--color-neon-lime)")}
-              name="Min Severity"
-            />
-
             {/* Average line */}
             <Line
               yAxisId="severity"
@@ -760,29 +743,18 @@ export default function DashboardChart({
         <div className="mt-4 text-xs text-[--color-subtle] space-y-1">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[var(--color-alert)]"></div>
-              <span>Aura present</span>
-            </div>
-            <div className="flex items-center gap-2">
               <div
                 className="h-3 w-3 rounded-sm"
                 style={{ background: "#3b82f6" }}
               />
               <span>Medication (bars, right scale)</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[var(--color-neon-lime)]"></div>
-              <span>Other events</span>
-            </div>
             {hasHrvChart && (
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-[#c084fc]" />
-                <span>HRV (purple line, right scale)</span>
+                <span>HRV (right scale)</span>
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <span>Bar color indicates severity (light = low, dark = high)</span>
-            </div>
           </div>
         </div>
       )}
