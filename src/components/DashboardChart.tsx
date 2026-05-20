@@ -508,6 +508,20 @@ export default function DashboardChart({
     return Math.max(50, Math.ceil(m * 1.1));
   }, [chartData]);
 
+  // Recharts reserves space for margins + Y-axis tick columns; keep these tight so the plot uses more width.
+  const chartMargin = useMemo(
+    () =>
+      compact
+        ? { top: 8, right: 0, left: 0, bottom: 0 }
+        : { top: 16, right: hasHrvChart ? 4 : 2, left: 4, bottom: 4 },
+    [compact, hasHrvChart],
+  );
+
+  const severityAxisWidth = compact ? 22 : 36;
+  const medicationAxisWidth = compact ? 18 : 32;
+  const hrvAxisWidth = compact ? 20 : 28;
+  const hrvAxisOffset = compact ? medicationAxisWidth : medicationAxisWidth + 2;
+
   // Only show individual bars for short windows (never for all-time — too many days)
   const showIndividualBars = days > 0 && days < 10;
 
@@ -528,7 +542,7 @@ export default function DashboardChart({
   }
 
   return (
-    <div className="panel">
+    <div className="panel overflow-hidden">
       <div className="flex items-center justify-between mb-4">
         {showTitle && (
           <h3
@@ -558,17 +572,12 @@ export default function DashboardChart({
         )}
       </div>
 
-      <div className="w-full" style={{ height: `${height}px` }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart
-            data={mergedData}
-            margin={{
-              top: 20,
-              right: compact ? (hasHrvChart ? 58 : 34) : (hasHrvChart ? 76 : 44),
-              left: 12,
-              bottom: 5,
-            }}
-          >
+      <div
+        className="w-full min-w-0 -mx-4 px-0.5 md:-mx-5"
+        style={{ height: `${height}px` }}
+      >
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <ComposedChart data={mergedData} margin={chartMargin}>
             <CartesianGrid
               strokeDasharray="3 3"
               stroke="color-mix(in oklch, var(--color-neon-violet) 20%, transparent)"
@@ -577,15 +586,19 @@ export default function DashboardChart({
               dataKey="displayDate"
               stroke="var(--color-subtle)"
               fontSize={compact ? 10 : 12}
-              angle={-45}
-              textAnchor="end"
-              height={60}
+              angle={compact ? 0 : -45}
+              textAnchor={compact ? "middle" : "end"}
+              height={compact ? 28 : 56}
+              tickMargin={compact ? 4 : 8}
+              padding={{ left: 0, right: 0 }}
             />
             <YAxis
               yAxisId="severity"
               orientation="left"
               stroke="var(--color-subtle)"
+              width={severityAxisWidth}
               tick={{ fill: "var(--color-subtle)", fontSize: compact ? 10 : 12 }}
+              tickMargin={2}
               domain={[0, 10]}
               label={
                 !compact
@@ -606,7 +619,8 @@ export default function DashboardChart({
               tick={{ fill: "#93c5fd", fontSize: compact ? 9 : 11 }}
               domain={[0, medicationAxisMax]}
               allowDecimals={false}
-              width={compact ? 30 : 38}
+              width={medicationAxisWidth}
+              tickMargin={2}
               label={
                 !compact
                   ? {
@@ -626,8 +640,9 @@ export default function DashboardChart({
                 stroke="#c084fc"
                 tick={{ fill: "#d8b4fe", fontSize: compact ? 8 : 10 }}
                 domain={[0, hrvAxisMax]}
-                width={compact ? 26 : 32}
-                offset={compact ? 26 : 34}
+                width={hrvAxisWidth}
+                offset={hrvAxisOffset}
+                tickMargin={2}
                 label={
                   !compact
                     ? {
