@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import DashboardChart from './components/DashboardChart'
 import HeadacheEntryForm from './components/HeadacheEntryForm'
@@ -155,30 +154,6 @@ export default function HomePage() {
           ) : (
             <p className="text-[--color-subtle] text-sm">Loading stats...</p>
           )}
-
-          <div className="mt-4 pt-4 border-t border-[--color-neon-violet]">
-            <h4 className="font-display text-sm mb-2 text-[--color-attention]">Actions</h4>
-            <div className="flex gap-2 flex-wrap">
-              <NavLink 
-                to="/entry" 
-                className="btn-ghost text-xs hover:text-[--color-neon-cyan] transition-colors"
-              >
-                Full Entry
-              </NavLink>
-              <NavLink 
-                to="/dashboard" 
-                className="btn-ghost text-xs hover:text-[--color-neon-cyan] transition-colors"
-              >
-                Full Dashboard
-              </NavLink>
-              <NavLink 
-                to="/history" 
-                className="btn-ghost text-xs hover:text-[--color-neon-cyan] transition-colors"
-              >
-                View History
-              </NavLink>
-            </div>
-          </div>
         </div>
       </div>
     </div>
