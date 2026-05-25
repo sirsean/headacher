@@ -19,6 +19,12 @@ export async function getGoogleIdentityEmail(db: D1Database, userId: string): Pr
   return row?.email ?? null;
 }
 
+/** True when the stored refresh token cannot be used without reconnecting OAuth. */
+export function googleHealthNeedsReauth(lastError: string | null): boolean {
+  if (!lastError) return false;
+  return lastError.startsWith("refresh_failed:") || lastError.startsWith("decrypt_failed:");
+}
+
 export async function hasGoogleIdentity(db: D1Database, userId: string): Promise<boolean> {
   const row = await db
     .prepare("SELECT 1 AS k FROM identities WHERE user_id = ? AND provider = 'GOOGLE' LIMIT 1")
@@ -30,7 +36,7 @@ export async function hasGoogleIdentity(db: D1Database, userId: string): Promise
 export async function getGoogleHealthStatus(
   db: D1Database,
   userId: string,
-): Promise<{ connected: boolean; lastSyncAt: string | null; lastError: string | null }> {
+): Promise<{ connected: boolean; lastSyncAt: string | null; lastError: string | null; needsReauth: boolean }> {
   const row = await dbFirst<{ user_id: string; last_sync_at: string | null; last_error: string | null }>(
     db,
     "SELECT user_id, last_sync_at, last_error FROM google_health_oauth WHERE user_id = ?",
@@ -41,8 +47,14 @@ export async function getGoogleHealthStatus(
       last_error: typeof r.last_error === "string" ? r.last_error : null,
     }),
   );
-  if (!row) return { connected: false, lastSyncAt: null, lastError: null };
-  return { connected: true, lastSyncAt: row.last_sync_at, lastError: row.last_error };
+  if (!row) return { connected: false, lastSyncAt: null, lastError: null, needsReauth: false };
+  const lastError = row.last_error;
+  return {
+    connected: true,
+    lastSyncAt: row.last_sync_at,
+    lastError,
+    needsReauth: googleHealthNeedsReauth(lastError),
+  };
 }
 
 export async function upsertGoogleHealthOauth(

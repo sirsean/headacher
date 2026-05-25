@@ -341,6 +341,7 @@ app.get('/api/integrations/google-health/status', async (c) => {
     connected: s.connected,
     lastSyncAt: s.lastSyncAt,
     lastError: s.lastError,
+    needsReauth: s.needsReauth,
     requiredScopeForHrv: REQUIRED_HRV_API_SCOPE,
     requestedScopes: GOOGLE_HEALTH_SCOPES.split(" "),
   });

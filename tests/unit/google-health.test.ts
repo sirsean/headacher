@@ -5,6 +5,7 @@ import {
   parseDailyHrvDataPoints,
 } from "../../worker/services/google-health-api";
 import { parseIdTokenEmail } from "../../worker/services/google-health-oauth";
+import { googleHealthNeedsReauth } from "../../worker/services/google-health-db";
 import { encryptSecret, decryptSecret } from "../../worker/services/token-crypto";
 
 describe("buildDailyHrvDateFilter", () => {
@@ -85,6 +86,21 @@ describe("parseIdTokenEmail", () => {
     const r = parseIdTokenEmail(idToken);
     expect(r?.email).toBe("a@b.com");
     expect(r?.emailVerified).toBe(true);
+  });
+});
+
+describe("googleHealthNeedsReauth", () => {
+  it("is false when there is no last error", () => {
+    expect(googleHealthNeedsReauth(null)).toBe(false);
+  });
+
+  it("is true for refresh and decrypt failures", () => {
+    expect(googleHealthNeedsReauth("refresh_failed: invalid_grant")).toBe(true);
+    expect(googleHealthNeedsReauth("decrypt_failed: bad key")).toBe(true);
+  });
+
+  it("is false for fetch failures that may not need re-auth", () => {
+    expect(googleHealthNeedsReauth("fetch_failed: quota exceeded")).toBe(false);
   });
 });
 

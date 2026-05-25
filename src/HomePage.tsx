@@ -4,6 +4,7 @@ import DashboardChart from './components/DashboardChart'
 import HeadacheEntryForm from './components/HeadacheEntryForm'
 import EventEntryForm from './components/EventEntryForm'
 import AuthButtons from './components/AuthButtons'
+import GoogleHealthReauthBanner from './components/GoogleHealthReauthBanner'
 import type { DashboardData } from './api'
 
 export default function HomePage() {
@@ -79,6 +80,8 @@ export default function HomePage() {
   // Show authenticated user dashboard
   return (
     <div className="space-y-6">
+      <GoogleHealthReauthBanner />
+
       {/* Quick Entry - Headache Severity */}
       <div>
         <h3 className="font-display text-lg mb-3 text-[--color-neon-violet]">Quick Entry</h3>

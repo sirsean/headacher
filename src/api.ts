@@ -153,7 +153,7 @@ export interface DashboardData {
 
 export async function getGoogleHealthStatus(
   fetchWithAuth?: AuthenticatedFetch,
-): Promise<{ connected: boolean; lastSyncAt: string | null; lastError: string | null }> {
+): Promise<{ connected: boolean; lastSyncAt: string | null; lastError: string | null; needsReauth: boolean }> {
   const fetchFn = fetchWithAuth || fetch
   const res = await fetchFn(`${API_BASE}/api/integrations/google-health/status`)
   return handleJson(res)
