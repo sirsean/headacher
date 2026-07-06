@@ -22,7 +22,7 @@ export default function HeadacheEntryForm({
   compact = false 
 }: HeadacheEntryFormProps) {
   const [error, setError] = useState<string | null>(null)
-  const [newHeadache, setNewHeadache] = useState({ severity: 5, aura: 0 as 0 | 1 })
+  const [newHeadache, setNewHeadache] = useState({ severity: 0, aura: 0 as 0 | 1 })
   const [newEvent, setNewEvent] = useState({ event_type: '', value: '' })
   const [typeaheadReload, setTypeaheadReload] = useState(0)
   const { addHeadache, addEvent } = useMutations()
@@ -35,7 +35,7 @@ export default function HeadacheEntryForm({
     setError(null)
     try {
       await addHeadache(newHeadache)
-      setNewHeadache({ severity: 5, aura: 0 as 0 | 1 })
+      setNewHeadache({ severity: 0, aura: 0 as 0 | 1 })
       success(`Headache recorded (severity: ${newHeadache.severity}${newHeadache.aura ? ', with aura' : ''})`)
       onSuccess?.()
     } catch (e: unknown) {
